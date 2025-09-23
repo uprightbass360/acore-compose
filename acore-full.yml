@@ -1,0 +1,199 @@
+version: "3.9"
+
+services:
+  # Step 1: Standard MySQL database
+  ac-mysql:
+    image: mysql:8.0
+    container_name: ac-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DOCKER_DB_ROOT_PASSWORD:-password}
+      MYSQL_ROOT_HOST: '%'
+    ports:
+      - "${DOCKER_DB_EXTERNAL_PORT:-64306}:3306"
+    volumes:
+      - ac_mysql_data:/var/lib/mysql
+    command: >
+      --default-authentication-plugin=mysql_native_password
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --max_connections=1000
+      --innodb-buffer-pool-size=256M
+      --innodb-log-file-size=64M
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${DOCKER_DB_ROOT_PASSWORD:-password}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - azerothcore
+
+  # Step 2: Initialize databases (fixed SQL syntax)
+  ac-db-init:
+    image: mysql:8.0
+    container_name: ac-db-init
+    depends_on:
+      ac-mysql:
+        condition: service_healthy
+    networks:
+      - azerothcore
+    environment:
+      MYSQL_PWD: ${DOCKER_DB_ROOT_PASSWORD:-password}
+    command: |
+      sh -c '
+      echo "Creating AzerothCore databases..."
+      mysql -h ac-mysql -uroot -e "
+      CREATE DATABASE IF NOT EXISTS acore_auth DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+      CREATE DATABASE IF NOT EXISTS acore_world DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+      CREATE DATABASE IF NOT EXISTS acore_characters DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+      SHOW DATABASES;
+      " || true
+      echo "Databases created!"
+      '
+    restart: "no"
+
+  # Step 3: Import AzerothCore database schema and data
+  ac-db-import:
+    image: acore/ac-wotlk-db-import:14.0.0-dev
+    container_name: ac-db-import
+    depends_on:
+      - ac-db-init
+    networks:
+      - azerothcore
+    volumes:
+      - ac_config:/azerothcore/env/dist/etc
+    environment:
+      AC_DATA_DIR: "/azerothcore/data"
+      AC_LOGS_DIR: "/azerothcore/logs"
+      AC_LOGIN_DATABASE_INFO: "ac-mysql;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_auth"
+      AC_WORLD_DATABASE_INFO: "ac-mysql;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_world"
+      AC_CHARACTER_DATABASE_INFO: "ac-mysql;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_characters"
+      AC_CLOSE_IDLE_CONNECTIONS: "false"
+      AC_UPDATES_ENABLE_DATABASES: "7"
+      AC_UPDATES_AUTO_SETUP: "1"
+    entrypoint: ["/bin/bash", "-c"]
+    command: |
+      "
+      echo 'Waiting for databases to be ready...'
+      sleep 10
+      
+      echo 'Creating config file for dbimport...'
+      mkdir -p /azerothcore/env/dist/etc
+      cat > /azerothcore/env/dist/etc/dbimport.conf <<EOF
+      LoginDatabaseInfo = \"ac-mysql;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_auth\"
+      WorldDatabaseInfo = \"ac-mysql;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_world\"
+      CharacterDatabaseInfo = \"ac-mysql;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_characters\"
+      Updates.EnableDatabases = 7
+      Updates.AutoSetup = 1
+      EOF
+      
+      echo 'Running database import...'
+      cd /azerothcore/env/dist/bin
+      ./dbimport
+      
+      echo 'Database import complete!'
+      "
+    restart: "no"
+
+  # Step 4: Auth server
+  ac-authserver:
+    image: acore/ac-wotlk-authserver:14.0.0-dev
+    container_name: ac-authserver
+    depends_on:
+      - ac-db-import
+    environment:
+      AC_LOGIN_DATABASE_INFO: "ac-mysql;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_auth"
+      AC_UPDATES_ENABLE_DATABASES: "0"
+      AC_BIND_IP: "0.0.0.0"
+    ports:
+      - "${DOCKER_AUTH_EXTERNAL_PORT:-3784}:3724"
+    restart: unless-stopped
+    networks:
+      - azerothcore
+    volumes:
+      - ac_config:/azerothcore/env/dist/etc
+    # Add capabilities for priority setting
+    cap_add:
+      - SYS_NICE
+
+  # Step 5: World server with fixed permissions
+  ac-worldserver:
+    image: acore/ac-wotlk-worldserver:14.0.0-dev
+    container_name: ac-worldserver
+    stdin_open: true
+    tty: true
+    depends_on:
+      - ac-authserver
+    environment:
+      AC_LOGIN_DATABASE_INFO: "ac-mysql;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_auth"
+      AC_WORLD_DATABASE_INFO: "ac-mysql;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_world"
+      AC_CHARACTER_DATABASE_INFO: "ac-mysql;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_characters"
+      AC_UPDATES_ENABLE_DATABASES: "0"
+      AC_BIND_IP: "0.0.0.0"
+      AC_DATA_DIR: "/azerothcore/data"
+      AC_SOAP_PORT: "7878"
+      # Disable process priority to avoid permission error
+      AC_PROCESS_PRIORITY: "0"
+    ports:
+      - "${DOCKER_WORLD_EXTERNAL_PORT:-8215}:8085"
+      - "${DOCKER_SOAP_EXTERNAL_PORT:-7778}:7878"
+    volumes:
+      - ac_data:/azerothcore/data
+      - ac_config:/azerothcore/env/dist/etc
+      - ac_logs:/azerothcore/logs
+    restart: unless-stopped
+    networks:
+      - azerothcore
+    # Add capabilities for process priority if needed
+    cap_add:
+      - SYS_NICE
+    # Create worldserver.conf with ProcessPriority = 0 to avoid permission issues
+    entrypoint: ["/bin/bash", "-c"]
+    command: |
+      "
+      echo 'Creating worldserver configuration...'
+      if [ ! -f /azerothcore/env/dist/etc/worldserver.conf ]; then
+        cat > /azerothcore/env/dist/etc/worldserver.conf <<EOF
+      LoginDatabaseInfo = \"ac-mysql;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_auth\"
+      WorldDatabaseInfo = \"ac-mysql;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_world\"
+      CharacterDatabaseInfo = \"ac-mysql;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_characters\"
+      DataDir = \"data\"
+      LogsDir = \"logs\"
+      LoginREST.Port = 8081
+      LoginREST.ExternalAddress = 127.0.0.1
+      LoginREST.LocalAddress = 127.0.0.1
+      SOAP.Port = 7878
+      SOAP.IP = 0.0.0.0
+      ProcessPriority = 0
+      Updates.EnableDatabases = 0
+      EOF
+      fi
+      
+      echo 'Starting worldserver...'
+      exec /azerothcore/env/dist/bin/worldserver
+      "
+
+  # Optional: Eluna Lua Engine
+  ac-eluna:
+    image: acore/eluna-ts:master
+    container_name: ac-eluna
+    depends_on:
+      - ac-worldserver
+    restart: unless-stopped
+    networks:
+      - azerothcore
+
+volumes:
+  ac_mysql_data:
+    driver: local
+  ac_data:
+    driver: local
+  ac_config:
+    driver: local
+  ac_logs:
+    driver: local
+
+networks:
+  azerothcore:
+    driver: bridge
