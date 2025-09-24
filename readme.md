@@ -9,14 +9,17 @@ This project is a Docker/Podman implementation based on:
 - **[AzerothCore with Playerbots Docker Setup](https://github.com/coc0nut/AzerothCore-with-Playerbots-Docker-Setup)** - Docker configuration inspiration and Playerbot integration approach
 
 ### Key Improvements in This Implementation
-- Full environment variable configuration (no hardcoded values)
-- Support for both Docker and Podman runtimes
-- Automated database initialization and imports
-- Comprehensive health checks and restart policies
-- Automated backup system with retention
-- Complete Portainer compatibility
-- Extended configuration options for all game settings
-- Production-ready security configurations
+- **Logger Issue Resolution**: Fixed worldserver startup issues with proper logger configuration
+- **Dynamic URL Generation**: Web interfaces automatically detect external URLs for deployment flexibility
+- **Port Collision Prevention**: All external ports optimized to avoid common development tool conflicts
+- **Enhanced Security**: Comprehensive security settings for all web interfaces (Grafana, InfluxDB, PHPMyAdmin)
+- **Full Environment Variable Configuration**: No hardcoded values, everything configurable via .env
+- **External Domain Support**: Configurable base URLs for custom domain deployment
+- **Multi-Runtime Support**: Works with both Docker and Podman
+- **Automated Database Initialization**: Complete schema import and setup automation
+- **Comprehensive Health Checks**: Built-in service monitoring and restart policies
+- **Automated Backup System**: Scheduled backups with configurable retention
+- **Production-Ready Security**: Advanced security configurations and best practices
 
 ## Table of Contents
 - [Overview](#overview)
@@ -117,7 +120,12 @@ azerothcore-docker/
 | `ac-authserver` | acore/ac-wotlk-authserver | Authentication server | 3784:3724 |
 | `ac-worldserver` | acore/ac-wotlk-worldserver | Game world server | 8215:8085, 7778:7878 |
 | `ac-eluna` | acore/eluna-ts:master | Lua scripting engine | - |
-| `ac-backup` | alpine:latest | Automated backup service | - |
+| `ac-phpmyadmin` | phpmyadmin/phpmyadmin | Database management web UI | 8081:80 |
+| `ac-grafana` | grafana/grafana | Monitoring dashboard | 3001:3000 |
+| `ac-influxdb` | influxdb:2.7-alpine | Metrics database | 8087:8086 |
+| `ac-keira3` | node:18-alpine | Database editor web UI | 4201:4200 |
+| `ac-cms` | nginx:alpine | Admin dashboard | 8001:80 |
+| `ac-backup` | mysql:8.0 | Automated backup service | - |
 
 ### Container Relationships
 
@@ -250,9 +258,17 @@ All configuration is managed through the `.env` file. Key variables:
 
 #### Network Settings
 - `EXTERNAL_IP`: Public IP for realm list
+- `EXTERNAL_BASE_URL`: Custom domain URL (e.g., https://acore.example.com)
 - `DOCKER_AUTH_EXTERNAL_PORT`: Auth server external port (3784)
 - `DOCKER_WORLD_EXTERNAL_PORT`: World server external port (8215)
 - `DOCKER_SOAP_EXTERNAL_PORT`: SOAP API port (7778)
+
+#### Web Interface Settings (Collision-Free Ports)
+- `PMA_EXTERNAL_PORT`: PHPMyAdmin port (8081)
+- `KEIRA3_EXTERNAL_PORT`: Database editor port (4201)
+- `GF_EXTERNAL_PORT`: Grafana monitoring port (3001)
+- `INFLUXDB_EXTERNAL_PORT`: InfluxDB metrics port (8087)
+- `CMS_EXTERNAL_PORT`: Admin dashboard port (8001)
 
 #### Performance Settings
 - `MAX_PLAYERS`: Maximum concurrent players

@@ -1,4 +1,5 @@
-version: "3.9"
+# NOTE: Do not include 'version:' attribute - it is obsolete and will cause warnings
+# Docker Compose automatically uses the latest compose file format
 
 services:
   # Step 1: Standard MySQL database
@@ -72,6 +73,11 @@ services:
       AC_CLOSE_IDLE_CONNECTIONS: "false"
       AC_UPDATES_ENABLE_DATABASES: "7"
       AC_UPDATES_AUTO_SETUP: "1"
+      # Logger configuration - Use defaults
+      AC_LOG_LEVEL: "1"
+      AC_LOGGER_ROOT_CONFIG: "1,Console"
+      AC_LOGGER_SERVER_CONFIG: "1,Console"
+      AC_APPENDER_CONSOLE_CONFIG: "1,2,0"
     entrypoint: ["/bin/bash", "-c"]
     command: |
       "
@@ -106,6 +112,11 @@ services:
       AC_LOGIN_DATABASE_INFO: "ac-mysql;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_auth"
       AC_UPDATES_ENABLE_DATABASES: "0"
       AC_BIND_IP: "0.0.0.0"
+      # Logger configuration - Use defaults
+      AC_LOG_LEVEL: "1"
+      AC_LOGGER_ROOT_CONFIG: "1,Console"
+      AC_LOGGER_SERVER_CONFIG: "1,Console"
+      AC_APPENDER_CONSOLE_CONFIG: "1,2,0"
     ports:
       - "${DOCKER_AUTH_EXTERNAL_PORT:-3784}:3724"
     restart: unless-stopped
@@ -117,7 +128,7 @@ services:
     cap_add:
       - SYS_NICE
 
-  # Step 5: World server with fixed permissions
+  # Step 5: World server with Playerbots support
   ac-worldserver:
     image: acore/ac-wotlk-worldserver:14.0.0-dev
     container_name: ac-worldserver
@@ -125,6 +136,7 @@ services:
     tty: true
     depends_on:
       - ac-authserver
+      - ac-client-data
     environment:
       AC_LOGIN_DATABASE_INFO: "ac-mysql;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_auth"
       AC_WORLD_DATABASE_INFO: "ac-mysql;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_world"
@@ -135,44 +147,28 @@ services:
       AC_SOAP_PORT: "7878"
       # Disable process priority to avoid permission error
       AC_PROCESS_PRIORITY: "0"
+      # Playerbots configuration
+      PLAYERBOT_ENABLED: "${PLAYERBOT_ENABLED:-1}"
+      PLAYERBOT_MAX_BOTS: "${PLAYERBOT_MAX_BOTS:-40}"
+      # Logger configuration - Use defaults
+      AC_LOG_LEVEL: "1"
+      AC_LOGGER_ROOT_CONFIG: "1,Console"
+      AC_LOGGER_SERVER_CONFIG: "1,Console"
+      AC_APPENDER_CONSOLE_CONFIG: "1,2,0"
     ports:
       - "${DOCKER_WORLD_EXTERNAL_PORT:-8215}:8085"
       - "${DOCKER_SOAP_EXTERNAL_PORT:-7778}:7878"
     volumes:
-      - ac_data:/azerothcore/data
+      - ${HOST_DATA_PATH:-./data}:/azerothcore/data
       - ac_config:/azerothcore/env/dist/etc
       - ac_logs:/azerothcore/logs
+      - ac_modules:/azerothcore/modules
     restart: unless-stopped
     networks:
       - azerothcore
     # Add capabilities for process priority if needed
     cap_add:
       - SYS_NICE
-    # Create worldserver.conf with ProcessPriority = 0 to avoid permission issues
-    entrypoint: ["/bin/bash", "-c"]
-    command: |
-      "
-      echo 'Creating worldserver configuration...'
-      if [ ! -f /azerothcore/env/dist/etc/worldserver.conf ]; then
-        cat > /azerothcore/env/dist/etc/worldserver.conf <<EOF
-      LoginDatabaseInfo = \"ac-mysql;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_auth\"
-      WorldDatabaseInfo = \"ac-mysql;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_world\"
-      CharacterDatabaseInfo = \"ac-mysql;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_characters\"
-      DataDir = \"data\"
-      LogsDir = \"logs\"
-      LoginREST.Port = 8081
-      LoginREST.ExternalAddress = 127.0.0.1
-      LoginREST.LocalAddress = 127.0.0.1
-      SOAP.Port = 7878
-      SOAP.IP = 0.0.0.0
-      ProcessPriority = 0
-      Updates.EnableDatabases = 0
-      EOF
-      fi
-      
-      echo 'Starting worldserver...'
-      exec /azerothcore/env/dist/bin/worldserver
-      "
 
   # Optional: Eluna Lua Engine
   ac-eluna:
@@ -184,14 +180,486 @@ services:
     networks:
       - azerothcore
 
+  # Module Management Service
+  ac-modules:
+    image: alpine/git:latest
+    container_name: ac-modules
+    volumes:
+      - ac_modules:/modules
+    environment:
+      - MODULE_PLAYERBOTS=${MODULE_PLAYERBOTS:-1}
+      - MODULE_AOE_LOOT=${MODULE_AOE_LOOT:-0}
+      - MODULE_LEARN_SPELLS=${MODULE_LEARN_SPELLS:-0}
+      - MODULE_FIREWORKS=${MODULE_FIREWORKS:-0}
+      - MODULE_INDIVIDUAL_PROGRESSION=${MODULE_INDIVIDUAL_PROGRESSION:-0}
+    entrypoint: ["/bin/sh", "-c"]
+    command: |
+      "
+      echo 'Initializing module management...'
+      cd /modules
+
+      # Install Playerbots if enabled
+      if [ \"$$MODULE_PLAYERBOTS\" = \"1\" ] && [ ! -d \"mod-playerbots\" ]; then
+        echo 'Installing mod-playerbots...'
+        git clone https://github.com/liyunfan1223/mod-playerbots.git mod-playerbots
+      fi
+
+      # Install AOE Loot if enabled
+      if [ \"$$MODULE_AOE_LOOT\" = \"1\" ] && [ ! -d \"mod-aoe-loot\" ]; then
+        echo 'Installing mod-aoe-loot...'
+        git clone https://github.com/azerothcore/mod-aoe-loot.git mod-aoe-loot
+      fi
+
+      # Install Learn Spells if enabled
+      if [ \"$$MODULE_LEARN_SPELLS\" = \"1\" ] && [ ! -d \"mod-learn-spells\" ]; then
+        echo 'Installing mod-learn-spells...'
+        git clone https://github.com/azerothcore/mod-learn-spells.git mod-learn-spells
+      fi
+
+      # Install Fireworks on Level if enabled
+      if [ \"$$MODULE_FIREWORKS\" = \"1\" ] && [ ! -d \"mod-fireworks-on-level\" ]; then
+        echo 'Installing mod-fireworks-on-level...'
+        git clone https://github.com/azerothcore/mod-fireworks-on-level.git mod-fireworks-on-level
+      fi
+
+      # Install Individual Progression if enabled
+      if [ \"$$MODULE_INDIVIDUAL_PROGRESSION\" = \"1\" ] && [ ! -d \"mod-individual-progression\" ]; then
+        echo 'Installing mod-individual-progression...'
+        git clone https://github.com/azerothcore/mod-individual-progression.git mod-individual-progression
+      fi
+
+      echo 'Module management complete. Keeping container alive...'
+      tail -f /dev/null
+      "
+    restart: "no"
+    networks:
+      - azerothcore
+
+  # Client Data Download Service
+  ac-client-data:
+    image: alpine:latest
+    container_name: ac-client-data
+    volumes:
+      - ${HOST_DATA_PATH:-./data}:/azerothcore/data
+    working_dir: /tmp
+    command: >
+      sh -c "
+      # Install required packages
+      apk add --no-cache curl unzip wget ca-certificates
+
+      # Check if data already exists
+      if [ -d '/azerothcore/data/maps' ] && [ -d '/azerothcore/data/vmaps' ] && [ -d '/azerothcore/data/mmaps' ] && [ -d '/azerothcore/data/dbc' ]; then
+        echo '✅ Game data already exists, skipping download'
+        exit 0
+      fi
+
+      echo '🚀 Starting AzerothCore game data download...'
+      echo 'This will download ~15GB of data and may take 10-30 minutes'
+
+      # Get the latest release info from wowgaming/client-data
+      echo '📡 Fetching latest client data release info...'
+      LATEST_URL=\$(wget -qO- https://api.github.com/repos/wowgaming/client-data/releases/latest | grep '\"browser_download_url\":' | grep '\.7z' | cut -d'\"' -f4 | head -1)
+
+      if [ -z \"\$$LATEST_URL\" ]; then
+        echo '❌ Could not fetch latest release URL'
+        echo '📥 Using fallback: direct download from v16 release'
+        LATEST_URL='https://github.com/wowgaming/client-data/releases/download/v16/data.7z'
+      fi
+
+      echo \"📥 Downloading client data from: \$$LATEST_URL\"
+
+      # Download the client data
+      wget -O data.7z \"\$$LATEST_URL\" || {
+        echo '❌ Download failed, trying alternative method'
+        curl -L -o data.7z \"\$$LATEST_URL\" || {
+          echo '❌ All download methods failed'
+          exit 1
+        }
+      }
+
+      echo '📊 Download completed, file size:'
+      ls -lh data.7z
+
+      # Install p7zip for extraction
+      echo '🔧 Installing 7zip extractor...'
+      apk add --no-cache p7zip
+
+      echo '📂 Extracting client data (this may take 10-15 minutes)...'
+      7z x data.7z -o/azerothcore/data/ || {
+        echo '❌ Extraction failed'
+        exit 1
+      }
+
+      echo '🧹 Cleaning up downloaded archive...'
+      rm -f data.7z
+
+      echo '✅ Client data extraction complete!'
+      echo '📁 Verifying extracted directories:'
+      ls -la /azerothcore/data/
+
+      # Verify required directories exist
+      for dir in maps vmaps mmaps dbc; do
+        if [ -d \"/azerothcore/data/\$$dir\" ]; then
+          echo \"✅ \$$dir directory: OK\"
+        else
+          echo \"❌ \$$dir directory: MISSING\"
+        fi
+      done
+
+      echo '🎉 Game data setup complete! AzerothCore worldserver can now start.'
+      "
+    restart: "no"
+    networks:
+      - azerothcore
+
+  # PHPMyAdmin Database Management Interface
+  ac-phpmyadmin:
+    image: phpmyadmin/phpmyadmin:latest
+    container_name: ac-phpmyadmin
+    depends_on:
+      ac-mysql:
+        condition: service_healthy
+    environment:
+      PMA_HOST: ${PMA_HOST:-ac-mysql}
+      PMA_PORT: ${PMA_PORT:-3306}
+      PMA_USER: ${PMA_USER:-root}
+      PMA_PASSWORD: ${DOCKER_DB_ROOT_PASSWORD:-password}
+      MYSQL_ROOT_PASSWORD: ${DOCKER_DB_ROOT_PASSWORD:-password}
+      PMA_ARBITRARY: ${PMA_ARBITRARY:-1}
+      # Security settings - configurable via .env
+      PMA_ABSOLUTE_URI: ${PMA_ABSOLUTE_URI:-}
+      UPLOAD_LIMIT: ${PMA_UPLOAD_LIMIT:-300M}
+      MEMORY_LIMIT: ${PMA_MEMORY_LIMIT:-512M}
+      MAX_EXECUTION_TIME: ${PMA_MAX_EXECUTION_TIME:-600}
+    ports:
+      - "${PMA_EXTERNAL_PORT:-8081}:80"
+    restart: unless-stopped
+    networks:
+      - azerothcore
+
+  # Keira3 Database Editor (Using Node.js base to serve the app)
+  ac-keira3:
+    image: node:18-alpine
+    container_name: ac-keira3
+    depends_on:
+      ac-mysql:
+        condition: service_healthy
+    environment:
+      DB_HOST: ac-mysql
+      DB_PORT: 3306
+      DB_USERNAME: root
+      DB_PASSWORD: ${DOCKER_DB_ROOT_PASSWORD:-password}
+      # External access configuration
+      EXTERNAL_BASE_URL: ${EXTERNAL_BASE_URL:-}
+      PMA_EXTERNAL_PORT: ${PMA_EXTERNAL_PORT:-8081}
+      KEIRA3_EXTERNAL_PORT: ${KEIRA3_EXTERNAL_PORT:-4201}
+      GF_EXTERNAL_PORT: ${GF_EXTERNAL_PORT:-3001}
+      INFLUXDB_EXTERNAL_PORT: ${INFLUXDB_EXTERNAL_PORT:-8087}
+    ports:
+      - "${KEIRA3_EXTERNAL_PORT:-4201}:4200"
+    working_dir: /app
+    volumes:
+      - ac_keira3_data:/app
+    command: >
+      sh -c "
+      if [ ! -d node_modules ]; then
+        echo 'Setting up Keira3...'
+        npm init -y
+        npm install express mysql2 cors
+        cat > server.js <<EOF
+      const express = require('express');
+      const mysql = require('mysql2');
+      const cors = require('cors');
+      const app = express();
+
+      app.use(cors());
+      app.use(express.json());
+      app.use(express.static('public'));
+
+      const dbConfig = {
+        host: process.env.DB_HOST,
+        port: process.env.DB_PORT,
+        user: process.env.DB_USERNAME,
+        password: process.env.DB_PASSWORD
+      };
+
+      app.get('/', (req, res) => {
+        const baseUrl = process.env.EXTERNAL_BASE_URL || 'http://localhost';
+        const port = process.env.KEIRA3_EXTERNAL_PORT;
+        const url = baseUrl.includes('://') ? \`\${baseUrl}:\${port}\` : \`http://\${baseUrl}:\${port}\`;
+        res.send(\`<h1>Keira3 Database Editor</h1><p>AzerothCore Database Management Interface</p><p>Connect to: <a href="\${url}">\${url}</a></p>\`);
+      });
+
+      app.get('/api/databases', (req, res) => {
+        const connection = mysql.createConnection(dbConfig);
+        connection.query('SHOW DATABASES', (err, results) => {
+          if (err) return res.status(500).json({error: err.message});
+          res.json(results);
+        });
+        connection.end();
+      });
+
+      app.listen(4200, '0.0.0.0', () => {
+        console.log('Keira3-like interface running on port 4200');
+      });
+      EOF
+        mkdir -p public
+        cat > public/index.html <<EOF
+      <!DOCTYPE html>
+      <html>
+      <head><title>AzerothCore Database Editor</title></head>
+      <body>
+        <h1>AzerothCore Database Management</h1>
+        <p>Simple database interface for AzerothCore</p>
+        <script>
+          const baseUrl = process.env.EXTERNAL_BASE_URL || window.location.protocol + '//' + window.location.hostname;
+          const pmaPort = process.env.PMA_EXTERNAL_PORT;
+          const pmaUrl = baseUrl.includes('://') ? baseUrl + ':' + pmaPort : 'http://' + baseUrl + ':' + pmaPort;
+          document.write('<p>Use PHPMyAdmin at <a href="' + pmaUrl + '">' + pmaUrl + '</a> for full database access.</p>');
+        </script>
+      </body>
+      </html>
+      EOF
+      fi
+      node server.js
+      "
+    restart: unless-stopped
+    networks:
+      - azerothcore
+
+  # InfluxDB for Monitoring
+  ac-influxdb:
+    image: influxdb:2.7-alpine
+    container_name: ac-influxdb
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: ${INFLUXDB_INIT_MODE:-setup}
+      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUXDB_ADMIN_USER:-acore}
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUXDB_ADMIN_PASSWORD:-acore123}
+      DOCKER_INFLUXDB_INIT_ORG: ${INFLUXDB_ORG:-azerothcore}
+      DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUXDB_BUCKET:-metrics}
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUXDB_TOKEN:-acore-monitoring-token-12345}
+      # Security settings
+      INFLUXDB_HTTP_AUTH_ENABLED: ${INFLUXDB_HTTP_AUTH_ENABLED:-true}
+      INFLUXDB_HTTP_HTTPS_ENABLED: ${INFLUXDB_HTTP_HTTPS_ENABLED:-false}
+    ports:
+      - "${INFLUXDB_EXTERNAL_PORT:-8087}:8086"
+    volumes:
+      - ac_influxdb_data:/var/lib/influxdb2
+    restart: unless-stopped
+    networks:
+      - azerothcore
+
+  # Grafana Monitoring Dashboard
+  ac-grafana:
+    image: grafana/grafana:latest
+    container_name: ac-grafana
+    depends_on:
+      - ac-influxdb
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:-acore123}
+      GF_INSTALL_PLUGINS: ${GF_INSTALL_PLUGINS:-grafana-piechart-panel}
+      GF_SERVER_ROOT_URL: ${GF_SERVER_ROOT_URL:-http://localhost:3000}
+      # Security settings
+      GF_SECURITY_DISABLE_INITIAL_ADMIN_CREATION: ${GF_SECURITY_DISABLE_INITIAL_ADMIN_CREATION:-false}
+      GF_SECURITY_SECRET_KEY: ${GF_SECURITY_SECRET_KEY:-}
+      GF_USERS_ALLOW_SIGN_UP: ${GF_USERS_ALLOW_SIGN_UP:-false}
+      GF_USERS_ALLOW_ORG_CREATE: ${GF_USERS_ALLOW_ORG_CREATE:-false}
+      GF_AUTH_ANONYMOUS_ENABLED: ${GF_AUTH_ANONYMOUS_ENABLED:-false}
+      GF_SERVER_ENABLE_GZIP: ${GF_SERVER_ENABLE_GZIP:-true}
+      GF_SECURITY_COOKIE_SECURE: ${GF_SECURITY_COOKIE_SECURE:-false}
+      GF_SECURITY_COOKIE_SAMESITE: ${GF_SECURITY_COOKIE_SAMESITE:-lax}
+    ports:
+      - "${GF_EXTERNAL_PORT:-3001}:3000"
+    volumes:
+      - ac_grafana_data:/var/lib/grafana
+      - ac_grafana_config:/etc/grafana
+    restart: unless-stopped
+    networks:
+      - azerothcore
+
+  # ACore CMS Web Interface
+  ac-cms:
+    image: nginx:alpine
+    container_name: ac-cms
+    depends_on:
+      ac-mysql:
+        condition: service_healthy
+    environment:
+      DB_HOST: ac-mysql
+      DB_PORT: 3306
+      DB_USERNAME: root
+      DB_PASSWORD: ${DOCKER_DB_ROOT_PASSWORD:-password}
+      # External access configuration
+      EXTERNAL_BASE_URL: ${EXTERNAL_BASE_URL:-}
+      PMA_EXTERNAL_PORT: ${PMA_EXTERNAL_PORT:-8081}
+      KEIRA3_EXTERNAL_PORT: ${KEIRA3_EXTERNAL_PORT:-4201}
+      GF_EXTERNAL_PORT: ${GF_EXTERNAL_PORT:-3001}
+      INFLUXDB_EXTERNAL_PORT: ${INFLUXDB_EXTERNAL_PORT:-8087}
+      CMS_EXTERNAL_PORT: ${CMS_EXTERNAL_PORT:-8001}
+    ports:
+      - "${CMS_EXTERNAL_PORT:-8001}:80"
+    volumes:
+      - ac_cms_data:/usr/share/nginx/html
+    command: >
+      sh -c "
+      cat > /usr/share/nginx/html/index.html <<EOF
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>AzerothCore Administration</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
+          .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+          h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+          .service-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-top: 30px; }
+          .service { background: #ecf0f1; padding: 20px; border-radius: 8px; text-align: center; }
+          .service h3 { margin: 0 0 10px 0; color: #2c3e50; }
+          .service a { color: #3498db; text-decoration: none; font-weight: bold; }
+          .service a:hover { text-decoration: underline; }
+          .status { margin: 20px 0; padding: 15px; background: #d5f4e6; border-left: 4px solid #27ae60; }
+        </style>
+      </head>
+      <body>
+        <div class='container'>
+          <h1>🏰 AzerothCore Administration Dashboard</h1>
+
+          <div class='status'>
+            <strong>Server Status:</strong> ✅ Running<br>
+            <strong>Database:</strong> ✅ Connected<br>
+            <strong>Playerbots:</strong> ✅ Enabled (Max: 40)
+          </div>
+
+          <div class='service-list'>
+            <div class='service'>
+              <h3>📊 Database Management</h3>
+              <p>Full MySQL database access</p>
+              <a href='#' id='phpmyadmin-link' target='_blank'>Open PHPMyAdmin</a>
+            </div>
+
+            <div class='service'>
+              <h3>⚙️ Database Editor</h3>
+              <p>AzerothCore database interface</p>
+              <a href='#' id='keira3-link' target='_blank'>Open Keira3</a>
+            </div>
+
+            <div class='service'>
+              <h3>📈 Server Monitoring</h3>
+              <p>Performance and metrics dashboard</p>
+              <a href='#' id='grafana-link' target='_blank'>Open Grafana</a>
+            </div>
+
+            <div class='service'>
+              <h3>💾 Database Metrics</h3>
+              <p>Time-series database for monitoring</p>
+              <a href='#' id='influxdb-link' target='_blank'>Open InfluxDB</a>
+            </div>
+          </div>
+
+          <script>
+            // Build dynamic URLs from environment or current location
+            const baseUrl = window.location.protocol + '//' + window.location.hostname;
+            const ports = {
+              phpmyadmin: '${PMA_EXTERNAL_PORT}',
+              keira3: '${KEIRA3_EXTERNAL_PORT}',
+              grafana: '${GF_EXTERNAL_PORT}',
+              influxdb: '${INFLUXDB_EXTERNAL_PORT}'
+            };
+
+            // Set up links
+            document.getElementById('phpmyadmin-link').href = baseUrl + ':' + ports.phpmyadmin;
+            document.getElementById('keira3-link').href = baseUrl + ':' + ports.keira3;
+            document.getElementById('grafana-link').href = baseUrl + ':' + ports.grafana;
+            document.getElementById('influxdb-link').href = baseUrl + ':' + ports.influxdb;
+          </script>
+
+          <div style='margin-top: 30px; text-align: center; color: #7f8c8d;'>
+            <p><strong>Game Server Connection:</strong></p>
+            <p>Host: <code>localhost</code> | Auth Port: <code>3784</code> | World Port: <code>8215</code></p>
+            <p>Database Port: <code>64306</code> | SOAP Port: <code>7778</code></p>
+          </div>
+        </div>
+      </body>
+      </html>
+      EOF
+      nginx -g 'daemon off;'
+      "
+    restart: unless-stopped
+    networks:
+      - azerothcore
+
+  # Automated Backup System
+  ac-backup:
+    image: mysql:8.0
+    container_name: ac-backup
+    depends_on:
+      ac-mysql:
+        condition: service_healthy
+    environment:
+      MYSQL_HOST: ac-mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: root
+      MYSQL_PASSWORD: ${DOCKER_DB_ROOT_PASSWORD:-password}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-7}
+      BACKUP_CRON_SCHEDULE: ${BACKUP_CRON_SCHEDULE:-0 3 * * *}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ${HOST_BACKUP_PATH:-./backups}:/backups
+      - ${HOST_BACKUP_SCRIPTS_PATH:-./backup-scripts}:/scripts
+    working_dir: /scripts
+    command: >
+      bash -c "
+      # Install cron
+      apt-get update && apt-get install -y cron
+
+      # Ensure scripts are executable
+      chmod +x /scripts/*.sh
+
+      # Create log file
+      touch /var/log/backup.log
+
+      # Create cron job
+      echo \"\$$BACKUP_CRON_SCHEDULE /scripts/backup.sh >> /var/log/backup.log 2>&1\" | crontab -
+
+      # Start cron daemon
+      echo \"Starting backup service with schedule: \$$BACKUP_CRON_SCHEDULE\"
+      echo \"Backup retention: \$$BACKUP_RETENTION_DAYS days\"
+      echo \"Scripts location: /scripts\"
+      echo \"Backup location: /backups\"
+
+      # Run initial backup
+      echo \"Running initial backup...\"
+      /scripts/backup.sh >> /var/log/backup.log 2>&1
+
+      # Start cron and keep it running
+      echo \"Starting cron daemon...\"
+      service cron start
+
+      # Keep container alive by tailing logs
+      tail -f /var/log/backup.log
+      "
+    restart: unless-stopped
+    networks:
+      - azerothcore
+
 volumes:
   ac_mysql_data:
-    driver: local
-  ac_data:
     driver: local
   ac_config:
     driver: local
   ac_logs:
+    driver: local
+  ac_modules:
+    driver: local
+  ac_influxdb_data:
+    driver: local
+  ac_grafana_data:
+    driver: local
+  ac_grafana_config:
+    driver: local
+  ac_cms_data:
+    driver: local
+  ac_keira3_data:
     driver: local
 
 networks:
