@@ -1,0 +1,376 @@
+version: '3.8'
+
+# ==============================================
+# AZEROTHCORE DOCKER COMPOSE - PORTAINER VERSION
+# ==============================================
+# For deployment in Portainer using NFS storage
+# Uses STORAGE_PATH_CONTAINERS with organized subpaths
+
+services:
+
+  # ==============================================
+  # DATABASE SERVICE
+  # ==============================================
+  ac-mysql:
+    image: mysql:8.0
+    container_name: ac-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-azerothcore123}
+      MYSQL_DATABASE: ${DB_AUTH_NAME:-acore_auth}
+      MYSQL_USER: ${MYSQL_USER:-root}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ${STORAGE_PATH_CONTAINERS}/azerothcore/mysql:/var/lib/mysql
+      - ${STORAGE_PATH_CONTAINERS}/azerothcore/mysql-config:/etc/mysql/conf.d
+    networks:
+      - azerothcore
+    ports:
+      - "${DOCKER_DB_EXTERNAL_PORT:-64306}:3306"
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --innodb-buffer-pool-size=${INNODB_BUFFER_POOL_SIZE:-256M}
+      --innodb-log-file-size=${INNODB_LOG_FILE_SIZE:-64M}
+      --max-connections=${MAX_CONNECTIONS:-1000}
+      --bind-address=0.0.0.0
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 10s
+      retries: 5
+      interval: 30s
+      start_period: 60s
+
+  # ==============================================
+  # DATABASE INITIALIZATION
+  # ==============================================
+  ac-db-init:
+    image: acore/ac-wotlk-db-import:14.0.0-dev
+    container_name: ac-db-init
+    restart: "no"
+    environment:
+      MYSQL_HOST: ac-mysql
+      MYSQL_PORT: 3306
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-azerothcore123}
+      MYSQL_USER: ${MYSQL_USER:-root}
+      DB_AUTH_NAME: ${DB_AUTH_NAME:-acore_auth}
+      DB_WORLD_NAME: ${DB_WORLD_NAME:-acore_world}
+      DB_CHARACTERS_NAME: ${DB_CHARACTERS_NAME:-acore_characters}
+    networks:
+      - azerothcore
+    depends_on:
+      ac-mysql:
+        condition: service_healthy
+    volumes:
+      - ${STORAGE_PATH_CONTAINERS}/azerothcore/logs:/azerothcore/logs
+
+  # ==============================================
+  # AUTHENTICATION SERVER
+  # ==============================================
+  ac-authserver:
+    image: acore/ac-wotlk-authserver:14.0.0-dev
+    container_name: ac-authserver
+    restart: unless-stopped
+    environment:
+      MYSQL_HOST: ac-mysql
+      MYSQL_PORT: 3306
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-azerothcore123}
+      MYSQL_USER: ${MYSQL_USER:-root}
+      DB_AUTH_NAME: ${DB_AUTH_NAME:-acore_auth}
+      BIND_IP: ${BIND_IP:-0.0.0.0}
+      AUTH_PORT: ${AUTH_PORT:-3724}
+      LOG_LEVEL: ${LOG_LEVEL:-1}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ${STORAGE_PATH_CONTAINERS}/azerothcore/config:/azerothcore/env/dist/etc
+      - ${STORAGE_PATH_CONTAINERS}/azerothcore/logs:/azerothcore/logs
+    networks:
+      - azerothcore
+    ports:
+      - "${DOCKER_AUTH_EXTERNAL_PORT:-3784}:3724"
+    depends_on:
+      ac-db-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "netstat -ln | grep :3724 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ==============================================
+  # CLIENT DATA DOWNLOAD SERVICE
+  # ==============================================
+  ac-client-data:
+    image: alpine:latest
+    container_name: ac-client-data
+    restart: "no"
+    volumes:
+      - ${STORAGE_PATH_CONTAINERS}/azerothcore/data:/azerothcore/data
+    command: >
+      sh -c "
+      apk add --no-cache curl unzip wget ca-certificates >/dev/null 2>&1 &&
+      echo '🚀 Starting AzerothCore game data download...' &&
+      echo 'This will download ~15GB of data and may take 10-30 minutes' &&
+      if [ ! -d '/azerothcore/data/maps' ] || [ ! -d '/azerothcore/data/vmaps' ]; then
+        LATEST_URL='https://github.com/wowgaming/client-data/releases/download/v16/data.zip' &&
+        echo \"📥 Downloading client data from: \$$LATEST_URL\" &&
+        wget -O data.zip \"\$$LATEST_URL\" --progress=dot:giga &&
+        echo '📊 Download completed, file size:' &&
+        ls -lh data.zip &&
+        echo '📂 Extracting client data (this may take 10-15 minutes)...' &&
+        unzip -q data.zip -d /azerothcore/data/ &&
+        rm -f data.zip &&
+        echo '✅ Client data extraction complete!' &&
+        echo '📁 Verifying extracted directories:' &&
+        ls -la /azerothcore/data/ &&
+        for dir in maps vmaps mmaps dbc; do
+          if [ -d \"/azerothcore/data/\$$dir\" ]; then
+            echo \"✅ \$$dir directory: OK\"
+          else
+            echo \"❌ \$$dir directory: MISSING\"
+          fi
+        done &&
+        echo '🎉 Game data setup complete!'
+      else
+        echo '✅ Client data already exists, skipping download'
+      fi
+      "
+
+  # ==============================================
+  # WORLD SERVER
+  # ==============================================
+  ac-worldserver:
+    image: acore/ac-wotlk-worldserver:14.0.0-dev
+    container_name: ac-worldserver
+    restart: unless-stopped
+    environment:
+      MYSQL_HOST: ac-mysql
+      MYSQL_PORT: 3306
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-azerothcore123}
+      MYSQL_USER: ${MYSQL_USER:-root}
+      DB_AUTH_NAME: ${DB_AUTH_NAME:-acore_auth}
+      DB_WORLD_NAME: ${DB_WORLD_NAME:-acore_world}
+      DB_CHARACTERS_NAME: ${DB_CHARACTERS_NAME:-acore_characters}
+      EXTERNAL_IP: ${EXTERNAL_IP:-192.168.1.100}
+      BIND_IP: ${BIND_IP:-0.0.0.0}
+      WORLD_PORT: ${WORLD_PORT:-8085}
+      REALM_ID: ${REALM_ID:-1}
+      REALM_NAME: ${REALM_NAME:-AzerothCore}
+      REALM_ZONE: ${REALM_ZONE:-1}
+      REALM_FLAGS: ${REALM_FLAGS:-0}
+      GAME_TYPE: ${GAME_TYPE:-0}
+      LOG_LEVEL: ${LOG_LEVEL:-1}
+      CONSOLE_ENABLE: ${CONSOLE_ENABLE:-1}
+      SOAP_ENABLED: ${SOAP_ENABLED:-0}
+      SOAP_IP: ${SOAP_IP:-0.0.0.0}
+      SOAP_PORT: ${SOAP_PORT:-7878}
+      RA_ENABLE: ${RA_ENABLE:-0}
+      TZ: ${TZ:-UTC}
+      # Logger configuration to prevent interactive prompts
+      APPENDER_CONSOLE_CONFIG: "1,2,0"
+      LOGGER_ROOT_CONFIG: "1,Console"
+      LOGGER_SERVER_CONFIG: "1,Console"
+      # Playerbot settings
+      PLAYERBOT_ENABLED: ${PLAYERBOT_ENABLED:-1}
+      PLAYERBOT_MAX_BOTS: ${PLAYERBOT_MAX_BOTS:-40}
+      MODULE_PLAYERBOTS: ${MODULE_PLAYERBOTS:-1}
+    volumes:
+      - ${STORAGE_PATH_CONTAINERS}/azerothcore/data:/azerothcore/data:ro
+      - ${STORAGE_PATH_CONTAINERS}/azerothcore/config:/azerothcore/env/dist/etc
+      - ${STORAGE_PATH_CONTAINERS}/azerothcore/logs:/azerothcore/logs
+      - ${STORAGE_PATH_CONTAINERS}/azerothcore/modules:/azerothcore/modules
+    networks:
+      - azerothcore
+    ports:
+      - "${DOCKER_WORLD_EXTERNAL_PORT:-8215}:8085"
+      - "${DOCKER_SOAP_EXTERNAL_PORT:-7778}:7878"
+    depends_on:
+      ac-authserver:
+        condition: service_healthy
+      ac-client-data:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "netstat -ln | grep :8085 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  # ==============================================
+  # PLAYERBOT MODULES
+  # ==============================================
+  ac-modules:
+    image: alpine:latest
+    container_name: ac-modules
+    restart: "no"
+    volumes:
+      - ${STORAGE_PATH_CONTAINERS}/azerothcore/modules:/modules
+    command: >
+      sh -c "
+      echo '🔧 Setting up AzerothCore modules...' &&
+      mkdir -p /modules/mod-playerbots &&
+      echo '✅ Playerbot module directory created' &&
+      echo 'Modules setup complete!'
+      "
+
+  # ==============================================
+  # BACKUP SERVICE
+  # ==============================================
+  ac-backup:
+    image: mysql:8.0
+    container_name: ac-backup
+    restart: unless-stopped
+    environment:
+      MYSQL_HOST: ac-mysql
+      MYSQL_PORT: 3306
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-azerothcore123}
+      BACKUP_CRON_SCHEDULE: ${BACKUP_CRON_SCHEDULE:-0 3 * * *}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-7}
+      BACKUP_FILE_PREFIX: ${BACKUP_FILE_PREFIX:-acore_backup}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ${STORAGE_PATH_CONTAINERS}/azerothcore/backups:/backups
+      - ${STORAGE_PATH_CONTAINERS}/azerothcore/backup-scripts:/backup-scripts
+    networks:
+      - azerothcore
+    depends_on:
+      ac-mysql:
+        condition: service_healthy
+    command: >
+      sh -c "
+      apt-get update >/dev/null 2>&1 &&
+      apt-get install -y cron jq >/dev/null 2>&1 &&
+      echo '${BACKUP_CRON_SCHEDULE:-0 3 * * *} /backup-scripts/backup.sh' | crontab - &&
+      echo '🔄 Backup service started with schedule: ${BACKUP_CRON_SCHEDULE:-0 3 * * *}' &&
+      cron -f
+      "
+
+  # ==============================================
+  # WEB MANAGEMENT INTERFACES
+  # ==============================================
+
+  # PHPMyAdmin
+  ac-phpmyadmin:
+    image: phpmyadmin/phpmyadmin:latest
+    container_name: ac-phpmyadmin
+    restart: unless-stopped
+    environment:
+      PMA_HOST: ${PMA_HOST:-ac-mysql}
+      PMA_PORT: ${PMA_PORT:-3306}
+      PMA_USER: ${PMA_USER:-root}
+      PMA_PASSWORD: ${MYSQL_ROOT_PASSWORD:-azerothcore123}
+      PMA_ARBITRARY: ${PMA_ARBITRARY:-1}
+      UPLOAD_LIMIT: ${PMA_UPLOAD_LIMIT:-300M}
+      MEMORY_LIMIT: ${PMA_MEMORY_LIMIT:-512M}
+      MAX_EXECUTION_TIME: ${PMA_MAX_EXECUTION_TIME:-600}
+      TZ: ${TZ:-UTC}
+    ports:
+      - "${PMA_EXTERNAL_PORT:-8081}:80"
+    networks:
+      - azerothcore
+    depends_on:
+      ac-mysql:
+        condition: service_healthy
+
+  # Grafana Monitoring
+  ac-grafana:
+    image: grafana/grafana:latest
+    container_name: ac-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:-acore123}
+      GF_SERVER_ROOT_URL: ${GF_SERVER_ROOT_URL:-http://localhost:3001}
+      GF_INSTALL_PLUGINS: ${GF_INSTALL_PLUGINS:-grafana-piechart-panel}
+      GF_SECURITY_DISABLE_INITIAL_ADMIN_CREATION: ${GF_SECURITY_DISABLE_INITIAL_ADMIN_CREATION:-false}
+      GF_USERS_ALLOW_SIGN_UP: ${GF_USERS_ALLOW_SIGN_UP:-false}
+      GF_USERS_ALLOW_ORG_CREATE: ${GF_USERS_ALLOW_ORG_CREATE:-false}
+      GF_AUTH_ANONYMOUS_ENABLED: ${GF_AUTH_ANONYMOUS_ENABLED:-false}
+      GF_SERVER_ENABLE_GZIP: ${GF_SERVER_ENABLE_GZIP:-true}
+      GF_SECURITY_COOKIE_SECURE: ${GF_SECURITY_COOKIE_SECURE:-false}
+      GF_SECURITY_COOKIE_SAMESITE: ${GF_SECURITY_COOKIE_SAMESITE:-lax}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ${STORAGE_PATH_CONTAINERS}/azerothcore/grafana:/var/lib/grafana
+      - ${STORAGE_PATH_CONTAINERS}/azerothcore/grafana-config:/etc/grafana
+    ports:
+      - "${GF_EXTERNAL_PORT:-3001}:3000"
+    networks:
+      - azerothcore
+    user: "0"
+
+  # InfluxDB Metrics
+  ac-influxdb:
+    image: influxdb:2.7-alpine
+    container_name: ac-influxdb
+    restart: unless-stopped
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: ${INFLUXDB_INIT_MODE:-setup}
+      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUXDB_ADMIN_USER:-acore}
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUXDB_ADMIN_PASSWORD:-acore123}
+      DOCKER_INFLUXDB_INIT_ORG: ${INFLUXDB_ORG:-azerothcore}
+      DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUXDB_BUCKET:-metrics}
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUXDB_TOKEN:-acore-monitoring-token-12345}
+      INFLUXDB_HTTP_AUTH_ENABLED: ${INFLUXDB_HTTP_AUTH_ENABLED:-true}
+      INFLUXDB_HTTP_HTTPS_ENABLED: ${INFLUXDB_HTTP_HTTPS_ENABLED:-false}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ${STORAGE_PATH_CONTAINERS}/azerothcore/influxdb:/var/lib/influxdb2
+    ports:
+      - "${INFLUXDB_EXTERNAL_PORT:-8087}:8086"
+    networks:
+      - azerothcore
+
+  # Keira3 Database Editor
+  ac-keira3:
+    image: acore/keira3:latest
+    container_name: ac-keira3
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ${STORAGE_PATH_CONTAINERS}/azerothcore/keira3:/app/data
+    ports:
+      - "${KEIRA3_EXTERNAL_PORT:-4201}:80"
+    networks:
+      - azerothcore
+    depends_on:
+      ac-mysql:
+        condition: service_healthy
+
+  # CMS Web Interface
+  ac-cms:
+    image: acore/acore-cms:latest
+    container_name: ac-cms
+    restart: unless-stopped
+    environment:
+      DB_HOST: ac-mysql
+      DB_PORT: 3306
+      DB_USERNAME: ${MYSQL_USER:-root}
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-azerothcore123}
+      DB_AUTH_NAME: ${DB_AUTH_NAME:-acore_auth}
+      DB_WORLD_NAME: ${DB_WORLD_NAME:-acore_world}
+      DB_CHARACTERS_NAME: ${DB_CHARACTERS_NAME:-acore_characters}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ${STORAGE_PATH_CONTAINERS}/azerothcore/cms:/app/data
+    ports:
+      - "${CMS_EXTERNAL_PORT:-8001}:80"
+    networks:
+      - azerothcore
+    depends_on:
+      ac-mysql:
+        condition: service_healthy
+
+# ==============================================
+# NETWORKS
+# ==============================================
+networks:
+  azerothcore:
+    driver: bridge
+    name: azerothcore
+    ipam:
+      config:
+        - subnet: ${NETWORK_SUBNET:-172.28.0.0/16}
+          gateway: ${NETWORK_GATEWAY:-172.28.0.1}
