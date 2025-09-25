@@ -481,27 +481,6 @@ services:
     networks:
       - azerothcore
 
-  # ACore CMS Web Interface
-  ac-cms:
-    image: nginx:alpine
-    container_name: ac-cms
-    depends_on:
-      ac-mysql:
-        condition: service_healthy
-    environment:
-      # External access configuration
-      EXTERNAL_BASE_URL: ${EXTERNAL_BASE_URL:-}
-      PMA_EXTERNAL_PORT: ${PMA_EXTERNAL_PORT:-8081}
-      KEIRA3_EXTERNAL_PORT: ${KEIRA3_EXTERNAL_PORT:-4201}
-      GF_EXTERNAL_PORT: ${GF_EXTERNAL_PORT:-3001}
-      INFLUXDB_EXTERNAL_PORT: ${INFLUXDB_EXTERNAL_PORT:-8087}
-    ports:
-      - "${CMS_EXTERNAL_PORT:-8001}:80"
-    volumes:
-      - ./assets/cms:/usr/share/nginx/html:ro
-    restart: unless-stopped
-    networks:
-      - azerothcore
 
   # Automated Backup System
   ac-backup:
@@ -571,8 +550,6 @@ volumes:
   ac_grafana_data:
     driver: local
   ac_grafana_config:
-    driver: local
-  ac_cms_data:
     driver: local
   ac_keira3_data:
     driver: local

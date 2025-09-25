@@ -124,7 +124,6 @@ azerothcore-docker/
 | `ac-grafana` | grafana/grafana | Monitoring dashboard | 3001:3000 |
 | `ac-influxdb` | influxdb:2.7-alpine | Metrics database | 8087:8086 |
 | `ac-keira3` | node:18-alpine | Database editor web UI | 4201:4200 |
-| `ac-cms` | nginx:alpine | Admin dashboard | 8001:80 |
 | `ac-backup` | mysql:8.0 | Automated backup service | - |
 
 ### Container Relationships
@@ -268,7 +267,6 @@ All configuration is managed through the `.env` file. Key variables:
 - `KEIRA3_EXTERNAL_PORT`: Database editor port (4201)
 - `GF_EXTERNAL_PORT`: Grafana monitoring port (3001)
 - `INFLUXDB_EXTERNAL_PORT`: InfluxDB metrics port (8087)
-- `CMS_EXTERNAL_PORT`: Admin dashboard port (8001)
 
 #### Performance Settings
 - `MAX_PLAYERS`: Maximum concurrent players
@@ -629,6 +627,25 @@ docker stats --no-stream
 - **[AzerothCore Discord](https://discord.gg/azerothcore)** - Community support
 - **[AzerothCore Forums](https://github.com/azerothcore/azerothcore-wotlk/discussions)** - Discussions
 - **[ChromieCraft](https://www.chromiecraft.com/)** - AzerothCore-based progressive server
+
+## Available Services
+
+| Service | Endpoint | Port | Purpose |
+|---------|----------|------|---------|
+| **Game Server** | `localhost:8215` | 8215 | World server (game connection) |
+| **Auth Server** | `localhost:3784` | 3784 | Authentication server |
+| **SOAP API** | `localhost:7778` | 7778 | Server administration API |
+| **PHPMyAdmin** | `http://localhost:8081` | 8081 | Database management interface |
+| **Keira3** | `http://localhost:4201` | 4201 | Database editor web UI |
+| **Grafana** | `http://localhost:3001` | 3001 | Monitoring dashboard |
+| **InfluxDB** | `localhost:8087` | 8087 | Metrics database |
+| **MySQL** | `localhost:64306` | 64306 | Direct database access |
+
+### Database Credentials
+- **Host**: `localhost:64306`
+- **User**: `root`
+- **Password**: `azerothcore123` (configurable in .env)
+- **Databases**: `acore_auth`, `acore_world`, `acore_characters`
 
 ### Related Projects
 - **[Original Docker Setup](https://github.com/coc0nut/AzerothCore-with-Playerbots-Docker-Setup)** - Base Docker configuration this project extends
