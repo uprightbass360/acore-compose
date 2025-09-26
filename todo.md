@@ -11,8 +11,7 @@
 
 #### 1. Fix Web Interface Syntax Issues
 **Affected Services**:
-- `ac-cms`: Minor shell syntax issues in embedded HTML heredoc
-- `ac-keira3`: Minor Node.js script syntax improvements needed
+- `ac-keira3`: Totally broken, requires fundamental changes to be run as a docker container
 **Status**: Services are functional but could be optimized
 **Impact**: Web interfaces work but may have occasional display issues
 
@@ -70,8 +69,7 @@ All major issues have been resolved:
 ✅ ac-influxdb     - Metrics database (port 8087)
 ✅ ac-modules      - Playerbots module (fully integrated - 40 bots)
 ✅ ac-backup       - Automated backups (working)
-⚠️ ac-cms          - Admin dashboard (minor syntax fixes)
-⚠️ ac-keira3       - Database editor (minor syntax fixes)
+⚠️ ac-keira3       - Broken
 ⚠️ ac-eluna        - Lua scripting (should be starting now)
 ```
 

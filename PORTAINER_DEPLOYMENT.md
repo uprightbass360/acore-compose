@@ -7,14 +7,14 @@ This guide will help you deploy AzerothCore in Portainer using your existing NFS
 ### **📁 Files Needed:**
 - `portainer-stack.yml` - Main docker-compose stack file
 - `portainer-env-template.txt` - Environment variables template
-- Your existing `backup-scripts/` directory
+- `backup-scripts/` Storage directory of backup and restoration scripts
 
 ---
 
 ## **📋 Step 1: Pre-Deployment Setup**
 
 ### **1.1 Prepare Storage Directories**
-Ensure these directories exist on your NFS storage:
+These directories will be created by the compose file:
 ```bash
 # Main AzerothCore directory structure
 ${STORAGE_PATH_CONTAINERS}/azerothcore/

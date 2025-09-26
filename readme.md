@@ -112,19 +112,18 @@ azerothcore-docker/
 
 ### Service Containers
 
-| Container | Image | Purpose | Exposed Ports |
-|-----------|-------|---------|---------------|
-| `ac-mysql` | mysql:8.0 | MySQL database server | 64306:3306 |
-| `ac-db-init` | mysql:8.0 | Database initialization (one-time) | - |
-| `ac-db-import` | acore/ac-wotlk-db-import | Schema/data import (one-time) | - |
-| `ac-authserver` | acore/ac-wotlk-authserver | Authentication server | 3784:3724 |
-| `ac-worldserver` | acore/ac-wotlk-worldserver | Game world server | 8215:8085, 7778:7878 |
-| `ac-eluna` | acore/eluna-ts:master | Lua scripting engine | - |
-| `ac-phpmyadmin` | phpmyadmin/phpmyadmin | Database management web UI | 8081:80 |
-| `ac-grafana` | grafana/grafana | Monitoring dashboard | 3001:3000 |
-| `ac-influxdb` | influxdb:2.7-alpine | Metrics database | 8087:8086 |
-| `ac-keira3` | node:18-alpine | Database editor web UI | 4201:4200 |
-| `ac-backup` | mysql:8.0 | Automated backup service | - |
+| Container | Image | Purpose | Exposed Ports | Status |
+|-----------|-------|---------|---------------|---------|
+| `ac-mysql` | mysql:8.0 | MySQL database server | 64306:3306 | ✅ Healthy |
+| `ac-authserver` | acore/ac-wotlk-authserver:14.0.0-dev | Authentication server | 3784:3724 | ⚠️ Running (unhealthy) |
+| `ac-worldserver` | acore/ac-wotlk-worldserver:14.0.0-dev | Game world server | 8215:8085, 7778:7878 | ⚠️ Running (unhealthy) |
+| `ac-eluna` | acore/eluna-ts:master | Lua scripting engine | - | 🔄 Restarting |
+| `ac-phpmyadmin` | phpmyadmin/phpmyadmin:latest | Database management web UI | 8081:80 | ✅ Running |
+| `ac-grafana` | grafana/grafana:latest | Monitoring dashboard | 3001:3000 | ✅ Running |
+| `ac-influxdb` | influxdb:2.7-alpine | Metrics database | 8087:8086 | ✅ Running |
+| `ac-keira3` | keira3:latest | Production database editor | 4201:8080 | ✅ Running (healthy) |
+| `ac-backup` | mysql:8.0 | Automated backup service | - | ✅ Running |
+| `ac-modules` | alpine/git:latest | Module management | - | ✅ Running |
 
 ### Container Relationships
 
