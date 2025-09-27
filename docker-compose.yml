@@ -157,7 +157,7 @@ services:
 
       # Get the latest release info from wowgaming/client-data
       echo '📡 Fetching latest client data release info...'
-      LATEST_URL=$$(wget -qO- https://api.github.com/repos/wowgaming/client-data/releases/latest | grep '\"browser_download_url\":' | grep '\.7z' | cut -d'\"' -f4 | head -1)
+      LATEST_URL=$$(wget -qO- https://api.github.com/repos/wowgaming/client-data/releases/latest | grep '"browser_download_url":' | grep '\.7z' | cut -d'"' -f4 | head -1)
 
       if [ -z \"$$LATEST_URL\" ]; then
         echo '❌ Could not fetch latest release URL'
