@@ -143,66 +143,67 @@ services:
     volumes:
       - ${HOST_DATA_PATH:-./data}:/azerothcore/data
     working_dir: /tmp
-    command: >
-      sh -c "
-      apk add --no-cache curl unzip wget ca-certificates p7zip
+    command:
+      - sh
+      - -c
+      - |
+        apk add --no-cache curl unzip wget ca-certificates p7zip
 
-      if [ -d '/azerothcore/data/maps' ] && [ -d '/azerothcore/data/vmaps' ] && [ -d '/azerothcore/data/mmaps' ] && [ -d '/azerothcore/data/dbc' ]; then
-        echo '✅ Game data already exists, skipping download'
-        exit 0
-      fi
+        if [ -d '/azerothcore/data/maps' ] && [ -d '/azerothcore/data/vmaps' ] && [ -d '/azerothcore/data/mmaps' ] && [ -d '/azerothcore/data/dbc' ]; then
+          echo '✅ Game data already exists, skipping download'
+          exit 0
+        fi
 
-      echo '🚀 Starting AzerothCore game data download...'
-      echo 'This will download ~15GB of data and may take 10-30 minutes'
+        echo '🚀 Starting AzerothCore game data download...'
+        echo 'This will download ~15GB of data and may take 10-30 minutes'
 
-      # Get the latest release info from wowgaming/client-data
-      echo '📡 Fetching latest client data release info...'
-      LATEST_URL=$$(wget -qO- https://api.github.com/repos/wowgaming/client-data/releases/latest | grep '"browser_download_url":' | grep '\.7z' | cut -d'"' -f4 | head -1)
+        # Get the latest release info from wowgaming/client-data
+        echo '📡 Fetching latest client data release info...'
+        LATEST_URL=$$(wget -qO- https://api.github.com/repos/wowgaming/client-data/releases/latest | grep '"browser_download_url":' | grep '\.7z' | cut -d'"' -f4 | head -1)
 
-      if [ -z \"$$LATEST_URL\" ]; then
-        echo '❌ Could not fetch latest release URL'
-        echo '📥 Using fallback: direct download from v16 release'
-        LATEST_URL='https://github.com/wowgaming/client-data/releases/download/v16/data.7z'
-      fi
+        if [ -z "$$LATEST_URL" ]; then
+          echo '❌ Could not fetch latest release URL'
+          echo '📥 Using fallback: direct download from v16 release'
+          LATEST_URL='https://github.com/wowgaming/client-data/releases/download/v16/data.7z'
+        fi
 
-      echo \"📥 Downloading client data from: $$LATEST_URL\"
+        echo "📥 Downloading client data from: $$LATEST_URL"
 
-      # Download the client data
-      wget -O data.7z \"$$LATEST_URL\" || {
-        echo '❌ Download failed, trying alternative method'
-        curl -L -o data.7z \"$$LATEST_URL\" || {
-          echo '❌ All download methods failed'
+        # Download the client data
+        wget -O data.7z "$$LATEST_URL" || {
+          echo '❌ Download failed, trying alternative method'
+          curl -L -o data.7z "$$LATEST_URL" || {
+            echo '❌ All download methods failed'
+            exit 1
+          }
+        }
+
+        echo '📊 Download completed, file size:'
+        ls -lh data.7z
+
+        echo '📂 Extracting client data (this may take 10-15 minutes)...'
+        7z x data.7z -o/azerothcore/data/ || {
+          echo '❌ Extraction failed'
           exit 1
         }
-      }
 
-      echo '📊 Download completed, file size:'
-      ls -lh data.7z
+        echo '🧹 Cleaning up downloaded archive...'
+        rm -f data.7z
 
-      echo '📂 Extracting client data (this may take 10-15 minutes)...'
-      7z x data.7z -o/azerothcore/data/ || {
-        echo '❌ Extraction failed'
-        exit 1
-      }
+        echo '✅ Client data extraction complete!'
+        echo '📁 Verifying extracted directories:'
+        ls -la /azerothcore/data/
 
-      echo '🧹 Cleaning up downloaded archive...'
-      rm -f data.7z
+        # Verify required directories exist
+        for dir in maps vmaps mmaps dbc; do
+          if [ -d "/azerothcore/data/$$dir" ]; then
+            echo "✅ $$dir directory: OK"
+          else
+            echo "❌ $$dir directory: MISSING"
+          fi
+        done
 
-      echo '✅ Client data extraction complete!'
-      echo '📁 Verifying extracted directories:'
-      ls -la /azerothcore/data/
-
-      # Verify required directories exist
-      for dir in maps vmaps mmaps dbc; do
-        if [ -d \"/azerothcore/data/$$dir\" ]; then
-          echo \"✅ $$dir directory: OK\"
-        else
-          echo \"❌ $$dir directory: MISSING\"
-        fi
-      done
-
-      echo '🎉 Game data setup complete! AzerothCore worldserver can now start.'
-      "
+        echo '🎉 Game data setup complete! AzerothCore worldserver can now start.'
     restart: "no"
     networks:
       - azerothcore
