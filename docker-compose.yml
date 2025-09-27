@@ -157,36 +157,36 @@ services:
 
         # Get the latest release info from wowgaming/client-data
         echo '📡 Fetching latest client data release info...'
-        LATEST_URL=$$(wget -qO- https://api.github.com/repos/wowgaming/client-data/releases/latest | grep '"browser_download_url":' | grep '\.7z' | cut -d'"' -f4 | head -1)
+        LATEST_URL=$$(wget -qO- https://api.github.com/repos/wowgaming/client-data/releases/latest | grep '"browser_download_url":' | grep '\.zip' | cut -d'"' -f4 | head -1)
 
         if [ -z "$$LATEST_URL" ]; then
           echo '❌ Could not fetch latest release URL'
           echo '📥 Using fallback: direct download from v16 release'
-          LATEST_URL='https://github.com/wowgaming/client-data/releases/download/v16/data.7z'
+          LATEST_URL='https://github.com/wowgaming/client-data/releases/download/v16/data.zip'
         fi
 
         echo "📥 Downloading client data from: $$LATEST_URL"
 
         # Download the client data
-        wget -O data.7z "$$LATEST_URL" || {
+        wget -O data.zip "$$LATEST_URL" || {
           echo '❌ Download failed, trying alternative method'
-          curl -L -o data.7z "$$LATEST_URL" || {
+          curl -L -o data.zip "$$LATEST_URL" || {
             echo '❌ All download methods failed'
             exit 1
           }
         }
 
         echo '📊 Download completed, file size:'
-        ls -lh data.7z
+        ls -lh data.zip
 
         echo '📂 Extracting client data (this may take 10-15 minutes)...'
-        7z x data.7z -o/azerothcore/data/ || {
+        unzip -q data.zip -d /azerothcore/data/ || {
           echo '❌ Extraction failed'
           exit 1
         }
 
         echo '🧹 Cleaning up downloaded archive...'
-        rm -f data.7z
+        rm -f data.zip
 
         echo '✅ Client data extraction complete!'
         echo '📁 Verifying extracted directories:'
