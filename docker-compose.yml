@@ -18,13 +18,13 @@ services:
       - "${DOCKER_DB_EXTERNAL_PORT:-64306}:3306"
     volumes:
       - ${STORAGE_PATH_CONTAINERS}${STORAGE_PATH_CONTAINERS:+/azerothcore/mysql}${STORAGE_PATH_CONTAINERS:-ac_mysql_data}:/var/lib/mysql
-    command: >
-      --default-authentication-plugin=mysql_native_password
-      --character-set-server=utf8mb4
-      --collation-server=utf8mb4_unicode_ci
-      --max_connections=1000
-      --innodb-buffer-pool-size=256M
-      --innodb-log-file-size=64M
+    command:
+      - --default-authentication-plugin=mysql_native_password
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --max_connections=1000
+      - --innodb-buffer-pool-size=256M
+      - --innodb-log-file-size=64M
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${DOCKER_DB_ROOT_PASSWORD:-password}"]
@@ -46,17 +46,18 @@ services:
       - azerothcore
     environment:
       MYSQL_PWD: ${DOCKER_DB_ROOT_PASSWORD:-password}
-    command: |
-      sh -c '
-      echo "Creating AzerothCore databases..."
-      mysql -h ac-mysql -uroot -e "
-      CREATE DATABASE IF NOT EXISTS acore_auth DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-      CREATE DATABASE IF NOT EXISTS acore_world DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-      CREATE DATABASE IF NOT EXISTS acore_characters DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-      SHOW DATABASES;
-      " || true
-      echo "Databases created!"
-      '
+    command:
+      - sh
+      - -c
+      - |
+        echo "Creating AzerothCore databases..."
+        mysql -h ac-mysql -uroot -e "
+        CREATE DATABASE IF NOT EXISTS acore_auth DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+        CREATE DATABASE IF NOT EXISTS acore_world DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+        CREATE DATABASE IF NOT EXISTS acore_characters DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+        SHOW DATABASES;
+        " || true
+        echo "Databases created!"
     restart: "no"
 
   # Step 3: Import AzerothCore database schema and data
@@ -83,27 +84,26 @@ services:
       AC_LOGGER_SERVER_CONFIG: "1,Console"
       AC_APPENDER_CONSOLE_CONFIG: "1,2,0"
     entrypoint: ["/bin/bash", "-c"]
-    command: |
-      "
-      echo 'Waiting for databases to be ready...'
-      sleep 10
+    command:
+      - |
+        echo 'Waiting for databases to be ready...'
+        sleep 10
 
-      echo 'Creating config file for dbimport...'
-      mkdir -p /azerothcore/env/dist/etc
-      cat > /azerothcore/env/dist/etc/dbimport.conf <<EOF
-      LoginDatabaseInfo = \"ac-mysql;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_auth\"
-      WorldDatabaseInfo = \"ac-mysql;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_world\"
-      CharacterDatabaseInfo = \"ac-mysql;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_characters\"
-      Updates.EnableDatabases = 7
-      Updates.AutoSetup = 1
-      EOF
+        echo 'Creating config file for dbimport...'
+        mkdir -p /azerothcore/env/dist/etc
+        cat > /azerothcore/env/dist/etc/dbimport.conf <<EOF
+        LoginDatabaseInfo = "ac-mysql;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_auth"
+        WorldDatabaseInfo = "ac-mysql;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_world"
+        CharacterDatabaseInfo = "ac-mysql;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_characters"
+        Updates.EnableDatabases = 7
+        Updates.AutoSetup = 1
+        EOF
 
-      echo 'Running database import...'
-      cd /azerothcore/env/dist/bin
-      ./dbimport
+        echo 'Running database import...'
+        cd /azerothcore/env/dist/bin
+        ./dbimport
 
-      echo 'Database import complete!'
-      "
+        echo 'Database import complete!'
     restart: "no"
 
   # Step 4: Auth server
@@ -274,51 +274,50 @@ services:
       - MODULE_INDIVIDUAL_PROGRESSION=${MODULE_INDIVIDUAL_PROGRESSION:-0}
       - DEPLOYMENT_MODE=${DEPLOYMENT_MODE:-local}
     entrypoint: ["/bin/sh", "-c"]
-    command: |
-      "
-      echo 'Initializing module management...'
-      cd /modules
+    command:
+      - |
+        echo 'Initializing module management...'
+        cd /modules
 
-      if [ \"$DEPLOYMENT_MODE\" = \"portainer\" ]; then
-        echo 'Simple module setup for Portainer deployment...'
-        mkdir -p mod-playerbots
-        echo '✅ Playerbot module directory created'
-      else
-        echo 'Advanced module setup for local development...'
-        # Install Playerbots if enabled
-        if [ \"$$MODULE_PLAYERBOTS\" = \"1\" ] && [ ! -d \"mod-playerbots\" ]; then
-          echo 'Installing mod-playerbots...'
-          git clone https://github.com/liyunfan1223/mod-playerbots.git mod-playerbots
+        if [ "$DEPLOYMENT_MODE" = "portainer" ]; then
+          echo 'Simple module setup for Portainer deployment...'
+          mkdir -p mod-playerbots
+          echo '✅ Playerbot module directory created'
+        else
+          echo 'Advanced module setup for local development...'
+          # Install Playerbots if enabled
+          if [ "$MODULE_PLAYERBOTS" = "1" ] && [ ! -d "mod-playerbots" ]; then
+            echo 'Installing mod-playerbots...'
+            git clone https://github.com/liyunfan1223/mod-playerbots.git mod-playerbots
+          fi
+
+          # Install AOE Loot if enabled
+          if [ "$MODULE_AOE_LOOT" = "1" ] && [ ! -d "mod-aoe-loot" ]; then
+            echo 'Installing mod-aoe-loot...'
+            git clone https://github.com/azerothcore/mod-aoe-loot.git mod-aoe-loot
+          fi
+
+          # Install Learn Spells if enabled
+          if [ "$MODULE_LEARN_SPELLS" = "1" ] && [ ! -d "mod-learn-spells" ]; then
+            echo 'Installing mod-learn-spells...'
+            git clone https://github.com/azerothcore/mod-learn-spells.git mod-learn-spells
+          fi
+
+          # Install Fireworks on Level if enabled
+          if [ "$MODULE_FIREWORKS" = "1" ] && [ ! -d "mod-fireworks-on-level" ]; then
+            echo 'Installing mod-fireworks-on-level...'
+            git clone https://github.com/azerothcore/mod-fireworks-on-level.git mod-fireworks-on-level
+          fi
+
+          # Install Individual Progression if enabled
+          if [ "$MODULE_INDIVIDUAL_PROGRESSION" = "1" ] && [ ! -d "mod-individual-progression" ]; then
+            echo 'Installing mod-individual-progression...'
+            git clone https://github.com/azerothcore/mod-individual-progression.git mod-individual-progression
+          fi
         fi
 
-        # Install AOE Loot if enabled
-        if [ \"$$MODULE_AOE_LOOT\" = \"1\" ] && [ ! -d \"mod-aoe-loot\" ]; then
-          echo 'Installing mod-aoe-loot...'
-          git clone https://github.com/azerothcore/mod-aoe-loot.git mod-aoe-loot
-        fi
-
-        # Install Learn Spells if enabled
-        if [ \"$$MODULE_LEARN_SPELLS\" = \"1\" ] && [ ! -d \"mod-learn-spells\" ]; then
-          echo 'Installing mod-learn-spells...'
-          git clone https://github.com/azerothcore/mod-learn-spells.git mod-learn-spells
-        fi
-
-        # Install Fireworks on Level if enabled
-        if [ \"$$MODULE_FIREWORKS\" = \"1\" ] && [ ! -d \"mod-fireworks-on-level\" ]; then
-          echo 'Installing mod-fireworks-on-level...'
-          git clone https://github.com/azerothcore/mod-fireworks-on-level.git mod-fireworks-on-level
-        fi
-
-        # Install Individual Progression if enabled
-        if [ \"$$MODULE_INDIVIDUAL_PROGRESSION\" = \"1\" ] && [ ! -d \"mod-individual-progression\" ]; then
-          echo 'Installing mod-individual-progression...'
-          git clone https://github.com/azerothcore/mod-individual-progression.git mod-individual-progression
-        fi
-      fi
-
-      echo 'Module management complete. Keeping container alive...'
-      tail -f /dev/null
-      "
+        echo 'Module management complete. Keeping container alive...'
+        tail -f /dev/null
     restart: "no"
     networks:
       - azerothcore
