@@ -348,11 +348,7 @@ services:
 
   # Keira3 Database Editor (Production Ready)
   ac-keira3:
-    build:
-      context: /home/upb/src/Keira3
-      dockerfile: Dockerfile
-      target: production
-    image: keira3:latest
+    image: uprightbass360/keira3:latest
     container_name: ac-keira3
     restart: unless-stopped
     depends_on:
