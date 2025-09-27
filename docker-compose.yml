@@ -9,6 +9,7 @@ services:
   ac-mysql:
     image: mysql:8.0
     container_name: ac-mysql
+    user: "0:0"  # Run as root to handle NFS permissions
     environment:
       MYSQL_ROOT_PASSWORD: ${DOCKER_DB_ROOT_PASSWORD:-password}
       MYSQL_ROOT_HOST: '%'
@@ -23,6 +24,7 @@ services:
       - --max_connections=1000
       - --innodb-buffer-pool-size=256M
       - --innodb-log-file-size=64M
+      - --user=mysql
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${DOCKER_DB_ROOT_PASSWORD:-password}"]
