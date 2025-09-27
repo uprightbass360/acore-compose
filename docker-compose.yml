@@ -17,7 +17,7 @@ services:
     ports:
       - "${DOCKER_DB_EXTERNAL_PORT:-64306}:3306"
     volumes:
-      - ${STORAGE_PATH_CONTAINERS}${STORAGE_PATH_CONTAINERS:+/azerothcore/mysql}${STORAGE_PATH_CONTAINERS:-ac_mysql_data}:/var/lib/mysql
+      - ${STORAGE_PATH_CONTAINERS:-./volumes}/azerothcore/mysql:/var/lib/mysql
     command:
       - --default-authentication-plugin=mysql_native_password
       - --character-set-server=utf8mb4
@@ -69,7 +69,7 @@ services:
     networks:
       - azerothcore
     volumes:
-      - ${STORAGE_PATH_CONTAINERS}${STORAGE_PATH_CONTAINERS:+/azerothcore/config}${STORAGE_PATH_CONTAINERS:-ac_config}:/azerothcore/env/dist/etc
+      - ${STORAGE_PATH_CONTAINERS:-./volumes}/azerothcore/config:/azerothcore/env/dist/etc
     environment:
       AC_DATA_DIR: "/azerothcore/data"
       AC_LOGS_DIR: "/azerothcore/logs"
@@ -126,7 +126,7 @@ services:
     networks:
       - azerothcore
     volumes:
-      - ${STORAGE_PATH_CONTAINERS}${STORAGE_PATH_CONTAINERS:+/azerothcore/config}${STORAGE_PATH_CONTAINERS:-ac_config}:/azerothcore/env/dist/etc
+      - ${STORAGE_PATH_CONTAINERS:-./volumes}/azerothcore/config:/azerothcore/env/dist/etc
     cap_add:
       - SYS_NICE
     healthcheck:
@@ -141,7 +141,7 @@ services:
     image: alpine:latest
     container_name: ac-client-data
     volumes:
-      - ${STORAGE_PATH_CONTAINERS:+${STORAGE_PATH_CONTAINERS}/azerothcore/data}${STORAGE_PATH_CONTAINERS:-ac_data}:/azerothcore/data
+      - ${STORAGE_PATH_CONTAINERS:-./volumes}/azerothcore/data:/azerothcore/data
     working_dir: /tmp
     command:
       - sh
@@ -234,10 +234,10 @@ services:
       - "${DOCKER_WORLD_EXTERNAL_PORT:-8215}:8085"
       - "${DOCKER_SOAP_EXTERNAL_PORT:-7778}:7878"
     volumes:
-      - ${STORAGE_PATH_CONTAINERS:+${STORAGE_PATH_CONTAINERS}/azerothcore/data}${STORAGE_PATH_CONTAINERS:-ac_data}:/azerothcore/data
-      - ${STORAGE_PATH_CONTAINERS}${STORAGE_PATH_CONTAINERS:+/azerothcore/config}${STORAGE_PATH_CONTAINERS:-ac_config}:/azerothcore/env/dist/etc
-      - ${STORAGE_PATH_CONTAINERS}${STORAGE_PATH_CONTAINERS:+/azerothcore/logs}${STORAGE_PATH_CONTAINERS:-ac_logs}:/azerothcore/logs
-      - ${STORAGE_PATH_CONTAINERS}${STORAGE_PATH_CONTAINERS:+/azerothcore/modules}${STORAGE_PATH_CONTAINERS:-ac_modules}:/azerothcore/modules
+      - ${STORAGE_PATH_CONTAINERS:-./volumes}/azerothcore/data:/azerothcore/data
+      - ${STORAGE_PATH_CONTAINERS:-./volumes}/azerothcore/config:/azerothcore/env/dist/etc
+      - ${STORAGE_PATH_CONTAINERS:-./volumes}/azerothcore/logs:/azerothcore/logs
+      - ${STORAGE_PATH_CONTAINERS:-./volumes}/azerothcore/modules:/azerothcore/modules
     restart: unless-stopped
     networks:
       - azerothcore
@@ -265,7 +265,7 @@ services:
     image: alpine/git:latest
     container_name: ac-modules
     volumes:
-      - ${STORAGE_PATH_CONTAINERS}${STORAGE_PATH_CONTAINERS:+/azerothcore/modules}${STORAGE_PATH_CONTAINERS:-ac_modules}:/modules
+      - ${STORAGE_PATH_CONTAINERS:-./volumes}/azerothcore/modules:/modules
     environment:
       - MODULE_PLAYERBOTS=${MODULE_PLAYERBOTS:-1}
       - MODULE_AOE_LOOT=${MODULE_AOE_LOOT:-0}
@@ -405,7 +405,7 @@ services:
     ports:
       - "${INFLUXDB_EXTERNAL_PORT:-8087}:8086"
     volumes:
-      - ${STORAGE_PATH_CONTAINERS}${STORAGE_PATH_CONTAINERS:+/azerothcore/influxdb}${STORAGE_PATH_CONTAINERS:-ac_influxdb_data}:/var/lib/influxdb2
+      - ${STORAGE_PATH_CONTAINERS:-./volumes}/azerothcore/influxdb:/var/lib/influxdb2
     restart: unless-stopped
     networks:
       - azerothcore
@@ -432,8 +432,8 @@ services:
     ports:
       - "${GF_EXTERNAL_PORT:-3001}:3000"
     volumes:
-      - ${STORAGE_PATH_CONTAINERS}${STORAGE_PATH_CONTAINERS:+/azerothcore/grafana}${STORAGE_PATH_CONTAINERS:-ac_grafana_data}:/var/lib/grafana
-      - ${STORAGE_PATH_CONTAINERS}${STORAGE_PATH_CONTAINERS:+/azerothcore/grafana-config}${STORAGE_PATH_CONTAINERS:-ac_grafana_config}:/etc/grafana
+      - ${STORAGE_PATH_CONTAINERS:-./volumes}/azerothcore/grafana:/var/lib/grafana
+      - ${STORAGE_PATH_CONTAINERS:-./volumes}/azerothcore/grafana-config:/etc/grafana
     restart: unless-stopped
     networks:
       - azerothcore
@@ -482,25 +482,6 @@ services:
     networks:
       - azerothcore
 
-volumes:
-  ac_mysql_data:
-    driver: local
-  ac_config:
-    driver: local
-  ac_logs:
-    driver: local
-  ac_modules:
-    driver: local
-  ac_data:
-    driver: local
-  ac_influxdb_data:
-    driver: local
-  ac_grafana_data:
-    driver: local
-  ac_grafana_config:
-    driver: local
-  ac_keira3_data:
-    driver: local
 
 networks:
   azerothcore:
