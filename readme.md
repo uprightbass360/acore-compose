@@ -96,16 +96,17 @@ This project provides a production-ready AzerothCore deployment using Docker/Pod
 ## Project Structure
 
 ```
-azerothcore-docker/
+acore-compose/
 ├── docker-compose.yml      # Main orchestration file
-├── .env                    # Environment configuration (create from .env.example)
+├── .env                    # Environment configuration
 ├── data/                   # Game data files (maps, vmaps, etc.)
 │   ├── dbc/               # Client database files
 │   ├── maps/              # Map files
 │   ├── vmaps/             # Visual map files
 │   └── mmaps/             # Movement map files (optional)
 ├── backups/               # Automated backup storage
-└── logs/                  # Application logs
+├── backup-scripts/        # Database backup automation
+└── assets/                # Web interface assets
 ```
 
 ## Container Architecture
@@ -121,7 +122,7 @@ azerothcore-docker/
 | `ac-phpmyadmin` | phpmyadmin/phpmyadmin:latest | Database management web UI | 8081:80 | ✅ Running |
 | `ac-grafana` | grafana/grafana:latest | Monitoring dashboard | 3001:3000 | ✅ Running |
 | `ac-influxdb` | influxdb:2.7-alpine | Metrics database | 8087:8086 | ✅ Running |
-| `ac-keira3` | keira3:latest | Production database editor | 4201:8080 | ✅ Running (healthy) |
+| `ac-keira3` | uprightbass360/keira3:latest | Production database editor with API | 4201:8080 | ✅ Running (healthy) |
 | `ac-backup` | mysql:8.0 | Automated backup service | - | ✅ Running |
 | `ac-modules` | alpine/git:latest | Module management | - | ✅ Running |
 
@@ -145,18 +146,17 @@ graph TD
 
 ## Initial Setup
 
-### Step 1: Prepare Environment File
+### Step 1: Clone and Configure
 
 ```bash
-# Create project directory
-mkdir -p /opt/azerothcore-docker
-cd /opt/azerothcore-docker
+# Clone the repository
+git clone https://github.com/uprightbass360/acore-compose.git
+cd acore-compose
 
-# Create .env file with your configuration
-# Copy the provided .env template and modify:
+# Environment file is already configured with defaults
+# Modify .env file for your specific deployment:
 # - EXTERNAL_IP: Your server's public IP
-# - MYSQL_ROOT_PASSWORD: Strong password
-# - HOST_*_PATH: Adjust paths as needed
+# - MYSQL_ROOT_PASSWORD: Strong password (default: azerothcore123)
 ```
 
 ### Step 2: Prepare Game Data Files
@@ -179,7 +179,6 @@ cp -r /path/to/extracted/mmaps/* data/mmaps/  # Optional
 
 ### Step 3: Deploy the Stack
 
-#### Using Docker Compose:
 ```bash
 # Deploy all services
 docker-compose up -d
@@ -189,21 +188,6 @@ docker-compose logs -f
 
 # Verify all containers are running
 docker ps | grep ac-
-```
-
-#### Using Podman Compose:
-```bash
-# Install podman-compose if needed
-pip3 install podman-compose
-
-# Deploy all services
-podman-compose up -d
-
-# Monitor deployment
-podman-compose logs -f
-
-# Verify all containers are running
-podman ps | grep ac-
 ```
 
 ### Step 4: Initial Database Import
@@ -635,7 +619,7 @@ docker stats --no-stream
 | **Auth Server** | `localhost:3784` | 3784 | Authentication server |
 | **SOAP API** | `localhost:7778` | 7778 | Server administration API |
 | **PHPMyAdmin** | `http://localhost:8081` | 8081 | Database management interface |
-| **Keira3** | `http://localhost:4201` | 4201 | Database editor web UI |
+| **Keira3** | `http://localhost:4201` | 4201 | Database editor web UI with API backend |
 | **Grafana** | `http://localhost:3001` | 3001 | Monitoring dashboard |
 | **InfluxDB** | `localhost:8087` | 8087 | Metrics database |
 | **MySQL** | `localhost:64306` | 64306 | Direct database access |
@@ -649,7 +633,6 @@ docker stats --no-stream
 ### Related Projects
 - **[Original Docker Setup](https://github.com/coc0nut/AzerothCore-with-Playerbots-Docker-Setup)** - Base Docker configuration this project extends
 - **[AzerothCore Modules](https://github.com/azerothcore/mod-repo-list)** - Additional modules catalog
-- **[AC-Web](https://github.com/azerothcore/acore-cms)** - Web CMS for AzerothCore
 
 ### Useful Commands Reference
 ```bash
