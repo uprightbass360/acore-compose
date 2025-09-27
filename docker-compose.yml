@@ -141,7 +141,7 @@ services:
     image: alpine:latest
     container_name: ac-client-data
     volumes:
-      - ${HOST_DATA_PATH:-./data}:/azerothcore/data
+      - ${STORAGE_PATH_CONTAINERS:+${STORAGE_PATH_CONTAINERS}/azerothcore/data}${STORAGE_PATH_CONTAINERS:-ac_data}:/azerothcore/data
     working_dir: /tmp
     command:
       - sh
@@ -234,7 +234,7 @@ services:
       - "${DOCKER_WORLD_EXTERNAL_PORT:-8215}:8085"
       - "${DOCKER_SOAP_EXTERNAL_PORT:-7778}:7878"
     volumes:
-      - ${HOST_DATA_PATH:-./data}:/azerothcore/data
+      - ${STORAGE_PATH_CONTAINERS:+${STORAGE_PATH_CONTAINERS}/azerothcore/data}${STORAGE_PATH_CONTAINERS:-ac_data}:/azerothcore/data
       - ${STORAGE_PATH_CONTAINERS}${STORAGE_PATH_CONTAINERS:+/azerothcore/config}${STORAGE_PATH_CONTAINERS:-ac_config}:/azerothcore/env/dist/etc
       - ${STORAGE_PATH_CONTAINERS}${STORAGE_PATH_CONTAINERS:+/azerothcore/logs}${STORAGE_PATH_CONTAINERS:-ac_logs}:/azerothcore/logs
       - ${STORAGE_PATH_CONTAINERS}${STORAGE_PATH_CONTAINERS:+/azerothcore/modules}${STORAGE_PATH_CONTAINERS:-ac_modules}:/azerothcore/modules
@@ -490,6 +490,8 @@ volumes:
   ac_logs:
     driver: local
   ac_modules:
+    driver: local
+  ac_data:
     driver: local
   ac_influxdb_data:
     driver: local
