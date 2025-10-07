@@ -6,7 +6,7 @@ This directory contains deployment, configuration, and management scripts for th
 
 ### 🚀 Setup & Deployment
 - **`setup-server.sh`** - Interactive server setup wizard (recommended for new users)
-- **`deploy-and-check.sh`** - Automated deployment and comprehensive health check script
+- **`deploy-and-check.sh`** - Universal deployment script with support for custom and template environment files
 - **`auto-post-install.sh`** - Automated post-installation configuration
 
 ### 🔧 Configuration & Management
@@ -52,22 +52,28 @@ This directory contains deployment, configuration, and management scripts for th
 
 ### 🩺 Health Checks & Deployment
 
-**Run Health Check on Current Deployment**
-```bash
-cd scripts
-./deploy-and-check.sh --skip-deploy
-```
-
-**Full Deployment with Health Checks**
+**Full Deployment with Setup Wizard**
 ```bash
 cd scripts
 ./deploy-and-check.sh
 ```
 
-**Quick Health Check (Basic Tests Only)**
+**Deploy with Existing Environment Files**
 ```bash
 cd scripts
-./deploy-and-check.sh --skip-deploy --quick-check
+./deploy-and-check.sh --skip-wizard
+```
+
+**Clean Deployment (Remove Existing First)**
+```bash
+cd scripts
+./deploy-and-check.sh --cleanup
+```
+
+**Test Configuration (Dry Run)**
+```bash
+cd scripts
+./deploy-and-check.sh --dry-run
 ```
 
 ### 🧹 Cleanup Resources
@@ -155,12 +161,12 @@ cd scripts
 
 ### Maintenance Operations
 ```bash
-# Health check existing deployment
-./scripts/deploy-and-check.sh --skip-deploy
+# Test current configuration without deployment
+./scripts/deploy-and-check.sh --dry-run
 
 # Clean restart (preserves data)
 ./scripts/cleanup.sh --hard
-./scripts/deploy-and-check.sh
+./scripts/deploy-and-check.sh --skip-wizard
 
 # Backup before major changes
 ./scripts/backup.sh

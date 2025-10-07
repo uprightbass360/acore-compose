@@ -34,7 +34,7 @@ cd scripts
 
 **After soft cleanup:**
 - All your game data is safe
-- Quick restart: `./deploy-and-check.sh --skip-deploy`
+- Quick restart: `./deploy-and-check.sh --skip-wizard`
 
 ### 🟡 **Hard Cleanup** (`--hard`)
 - **What it does**: Removes containers and networks
@@ -48,7 +48,7 @@ cd scripts
 
 **After hard cleanup:**
 - Your database and game data is preserved
-- Fresh deployment: `./deploy-and-check.sh`
+- Fresh deployment: `./deploy-and-check.sh --skip-wizard`
 - No need to re-download client data
 
 ### 🔴 **Nuclear Cleanup** (`--nuclear`)
@@ -131,7 +131,7 @@ The script automatically identifies and shows:
 ### After Soft Cleanup
 ```bash
 # Quick restart (containers only)
-./deploy-and-check.sh --skip-deploy
+./deploy-and-check.sh --skip-wizard
 
 # Or restart specific layer
 docker compose -f ../docker-compose-azerothcore-services.yml up -d
@@ -140,7 +140,7 @@ docker compose -f ../docker-compose-azerothcore-services.yml up -d
 ### After Hard Cleanup
 ```bash
 # Full deployment (reuses existing data)
-./deploy-and-check.sh
+./deploy-and-check.sh --skip-wizard
 ```
 
 ### After Nuclear Cleanup
@@ -177,7 +177,7 @@ docker compose -f ../docker-compose-azerothcore-services.yml up -d
 ```bash
 # Complete refresh workflow
 ./cleanup.sh --hard --force
-./deploy-and-check.sh
+./deploy-and-check.sh --skip-wizard
 
 # Troubleshooting workflow
 ./cleanup.sh --nuclear --dry-run  # See what would be removed
@@ -189,7 +189,7 @@ docker compose -f ../docker-compose-azerothcore-services.yml up -d
 ```bash
 # Automated cleanup in pipelines
 ./cleanup.sh --hard --force
-./deploy-and-check.sh --skip-deploy || ./deploy-and-check.sh
+./deploy-and-check.sh --skip-wizard || ./deploy-and-check.sh
 ```
 
 ## Troubleshooting
