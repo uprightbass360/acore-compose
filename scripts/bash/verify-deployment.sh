@@ -4,13 +4,14 @@ set -e
 
 # Simple profile-aware deploy + health check for profiles-verify/docker-compose.yml
 
-BLUE='\033[0;34m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
-info(){ echo -e "${BLUE}ℹ️  $*${NC}"; }
-ok(){ echo -e "${GREEN}✅ $*${NC}"; }
-warn(){ echo -e "${YELLOW}⚠️  $*${NC}"; }
-err(){ echo -e "${RED}❌ $*${NC}"; }
-
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Source common library for standardized logging
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if ! source "$SCRIPT_DIR/lib/common.sh" 2>/dev/null; then
+  echo "❌ FATAL: Cannot load $SCRIPT_DIR/lib/common.sh" >&2
+  exit 1
+fi
 COMPOSE_FILE="$PROJECT_DIR/docker-compose.yml"
 ENV_FILE=""
 TEMPLATE_FILE="$PROJECT_DIR/.env.template"

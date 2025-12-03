@@ -14,6 +14,13 @@ PROJECT_DIR="${SCRIPT_DIR}"
 DEFAULT_COMPOSE_FILE="${PROJECT_DIR}/docker-compose.yml"
 ENV_FILE="${PROJECT_DIR}/.env"
 TEMPLATE_FILE="${PROJECT_DIR}/.env.template"
+# Source common library with proper error handling
+if ! source "${PROJECT_DIR}/scripts/bash/lib/common.sh" 2>/dev/null; then
+  echo "❌ FATAL: Cannot load ${PROJECT_DIR}/scripts/bash/lib/common.sh" >&2
+  echo "This library is required for cleanup.sh to function." >&2
+  exit 1
+fi
+
 source "${PROJECT_DIR}/scripts/bash/project_name.sh"
 
 # Default project name (read from .env or template)
@@ -21,17 +28,16 @@ DEFAULT_PROJECT_NAME="$(project_name::resolve "$ENV_FILE" "$TEMPLATE_FILE")"
 source "${PROJECT_DIR}/scripts/bash/compose_overrides.sh"
 declare -a COMPOSE_FILE_ARGS=()
 
-# Colors
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; MAGENTA='\033[0;35m'; NC='\033[0m'
-
+# Color definitions now provided by lib/common.sh
+# Legacy print_status function for cleanup.sh compatibility
 print_status() {
   case "$1" in
-    INFO)    echo -e "${BLUE}ℹ️  ${2}${NC}";;
-    SUCCESS) echo -e "${GREEN}✅ ${2}${NC}";;
-    WARNING) echo -e "${YELLOW}⚠️  ${2}${NC}";;
-    ERROR)   echo -e "${RED}❌ ${2}${NC}";;
-    DANGER)  echo -e "${RED}💀 ${2}${NC}";;
-    HEADER)  echo -e "\n${MAGENTA}=== ${2} ===${NC}";;
+    INFO)    info "${2}";;
+    SUCCESS) ok "${2}";;
+    WARNING) warn "${2}";;
+    ERROR)   err "${2}";;
+    DANGER)  printf '%b\n' "${RED}💀 ${2}${NC}";;
+    HEADER)  printf '\n%b\n' "${CYAN}=== ${2} ===${NC}";;
   esac
 }
 

@@ -9,6 +9,13 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_PATH="$ROOT_DIR/.env"
 TEMPLATE_PATH="$ROOT_DIR/.env.template"
+# Source common library with proper error handling
+if ! source "$ROOT_DIR/scripts/bash/lib/common.sh" 2>/dev/null; then
+  echo "❌ FATAL: Cannot load $ROOT_DIR/scripts/bash/lib/common.sh" >&2
+  echo "This library is required for build.sh to function." >&2
+  exit 1
+fi
+
 source "$ROOT_DIR/scripts/bash/project_name.sh"
 
 # Default project name (read from .env or template)
@@ -17,11 +24,7 @@ ASSUME_YES=0
 FORCE_REBUILD=0
 SKIP_SOURCE_SETUP=0
 CUSTOM_SOURCE_PATH=""
-BLUE='\033[0;34m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
-info(){ printf '%b\n' "${BLUE}ℹ️  $*${NC}"; }
-ok(){ printf '%b\n' "${GREEN}✅ $*${NC}"; }
-warn(){ printf '%b\n' "${YELLOW}⚠️  $*${NC}"; }
-err(){ printf '%b\n' "${RED}❌ $*${NC}"; }
+# Color definitions and logging functions now provided by lib/common.sh
 
 show_build_header(){
   printf '\n%b\n' "${BLUE}🔨 AZEROTHCORE BUILD SYSTEM 🔨${NC}"

@@ -4,9 +4,31 @@
 # automatically rerun db-import-conditional to hydrate from backups.
 set -euo pipefail
 
-log(){ echo "🛡️ [db-guard] $*"; }
-warn(){ echo "⚠️ [db-guard] $*" >&2; }
-err(){ echo "❌ [db-guard] $*" >&2; }
+# Source common library if available (container environment)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/../scripts/bash/lib/common.sh" ]; then
+  # Running from project root
+  source "$SCRIPT_DIR/../scripts/bash/lib/common.sh"
+  db_guard_log() { info "🛡️ [db-guard] $*"; }
+  db_guard_warn() { warn "[db-guard] $*"; }
+  db_guard_err() { err "[db-guard] $*"; }
+elif [ -f "$SCRIPT_DIR/lib/common.sh" ]; then
+  # Running from scripts/bash directory
+  source "$SCRIPT_DIR/lib/common.sh"
+  db_guard_log() { info "🛡️ [db-guard] $*"; }
+  db_guard_warn() { warn "[db-guard] $*"; }
+  db_guard_err() { err "[db-guard] $*"; }
+else
+  # Fallback for container environment where lib/common.sh may not be available
+  db_guard_log(){ echo "🛡️ [db-guard] $*"; }
+  db_guard_warn(){ echo "⚠️ [db-guard] $*" >&2; }
+  db_guard_err(){ echo "❌ [db-guard] $*" >&2; }
+fi
+
+# Maintain compatibility with existing function names
+log() { db_guard_log "$*"; }
+warn() { db_guard_warn "$*"; }
+err() { db_guard_err "$*"; }
 
 MYSQL_HOST="${CONTAINER_MYSQL:-ac-mysql}"
 MYSQL_PORT="${MYSQL_PORT:-3306}"

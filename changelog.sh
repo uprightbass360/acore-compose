@@ -7,6 +7,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$SCRIPT_DIR"
 cd "$PROJECT_ROOT"
 
+# Source common library for standardized logging
+if ! source "$SCRIPT_DIR/scripts/bash/lib/common.sh" 2>/dev/null; then
+  echo "❌ FATAL: Cannot load $SCRIPT_DIR/scripts/bash/lib/common.sh" >&2
+  exit 1
+fi
+
 # Load environment configuration (available on deployed servers)
 if [ -f ".env" ]; then
   set -a
@@ -20,11 +26,10 @@ OUTPUT_DIR="${CHANGELOG_OUTPUT_DIR:-./changelogs}"
 DAYS_BACK="${CHANGELOG_DAYS_BACK:-7}"
 FORMAT="${CHANGELOG_FORMAT:-markdown}"
 
-# Colors for output
-GREEN='\033[0;32m'; BLUE='\033[0;34m'; YELLOW='\033[1;33m'; NC='\033[0m'
-log() { echo -e "${BLUE}[$(date '+%H:%M:%S')]${NC} $*" >&2; }
-success() { echo -e "${GREEN}✅${NC} $*" >&2; }
-warn() { echo -e "${YELLOW}⚠️${NC} $*" >&2; }
+# Specialized logging with timestamp for changelog context
+log() { info "[$(date '+%H:%M:%S')] $*"; }
+success() { ok "$*"; }
+# warn() function already provided by lib/common.sh
 
 usage() {
   cat <<EOF

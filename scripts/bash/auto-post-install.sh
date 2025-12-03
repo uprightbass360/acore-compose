@@ -195,8 +195,10 @@ else
   # Step 3: Update realmlist table
   echo ""
   echo "🌐 Step 3: Updating realmlist table..."
+  echo "   🔧 Setting realm address to: ${SERVER_ADDRESS}:${REALM_PORT}"
   mysql -h "${MYSQL_HOST}" -u"${MYSQL_USER}" -p"${MYSQL_ROOT_PASSWORD}" --skip-ssl-verify "${DB_AUTH_NAME}" -e "
     UPDATE realmlist SET address='${SERVER_ADDRESS}', port=${REALM_PORT} WHERE id=1;
+    SELECT CONCAT('   ✓ Realm configured: ', name, ' at ', address, ':', port) AS status FROM realmlist WHERE id=1;
   " || echo "⚠️  Could not update realmlist table"
 
   echo "✅ Realmlist updated"

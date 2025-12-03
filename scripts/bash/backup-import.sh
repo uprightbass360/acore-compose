@@ -6,15 +6,19 @@ INVOCATION_DIR="$PWD"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-COLOR_RED='\033[0;31m'
-COLOR_GREEN='\033[0;32m'
-COLOR_YELLOW='\033[1;33m'
-COLOR_RESET='\033[0m'
+# Source common libraries for standardized functionality
+if ! source "$SCRIPT_DIR/lib/common.sh" 2>/dev/null; then
+  echo "❌ FATAL: Cannot load $SCRIPT_DIR/lib/common.sh" >&2
+  exit 1
+fi
 
-log(){ printf '%b\n' "${COLOR_GREEN}$*${COLOR_RESET}"; }
-warn(){ printf '%b\n' "${COLOR_YELLOW}$*${COLOR_RESET}"; }
-err(){ printf '%b\n' "${COLOR_RED}$*${COLOR_RESET}"; }
-fatal(){ err "$*"; exit 1; }
+# Source utility libraries
+source "$SCRIPT_DIR/lib/mysql-utils.sh" 2>/dev/null || warn "MySQL utilities not available"
+source "$SCRIPT_DIR/lib/docker-utils.sh" 2>/dev/null || warn "Docker utilities not available"
+source "$SCRIPT_DIR/lib/env-utils.sh" 2>/dev/null || warn "Environment utilities not available"
+
+# Use log() for main output to maintain existing behavior
+log() { ok "$*"; }
 
 SUPPORTED_DBS=(auth characters world)
 declare -A SUPPORTED_SET=()
@@ -102,10 +106,14 @@ remove_from_list(){
   arr=("${filtered[@]}")
 }
 
+# Use env-utils.sh function if available, fallback to local implementation
 resolve_relative(){
-  local base="$1" path="$2"
-  if command -v python3 >/dev/null 2>&1; then
-    python3 - "$base" "$path" <<'PY'
+  if command -v path_resolve_absolute >/dev/null 2>&1; then
+    path_resolve_absolute "$2" "$1"
+  else
+    local base="$1" path="$2"
+    if command -v python3 >/dev/null 2>&1; then
+      python3 - "$base" "$path" <<'PY'
 import os, sys
 base, path = sys.argv[1:3]
 if not path:
@@ -115,8 +123,9 @@ elif os.path.isabs(path):
 else:
     print(os.path.normpath(os.path.join(base, path)))
 PY
-  else
-    fatal "python3 is required but was not found on PATH"
+    else
+      fatal "python3 is required but was not found on PATH"
+    fi
   fi
 }
 
@@ -280,7 +289,13 @@ backup_db(){
   local out="manual-backups/${label}-pre-import-$(timestamp).sql"
   mkdir -p manual-backups
   log "Backing up current ${schema} to ${out}"
-  docker exec ac-mysql mysqldump -uroot -p"$MYSQL_PW" "$schema" > "$out"
+
+  # Use mysql-utils.sh function if available, fallback to direct command
+  if command -v mysql_backup_database >/dev/null 2>&1; then
+    mysql_backup_database "$schema" "$out" "none" "ac-mysql" "$MYSQL_PW"
+  else
+    docker exec ac-mysql mysqldump -uroot -p"$MYSQL_PW" "$schema" > "$out"
+  fi
 }
 
 restore(){
@@ -302,7 +317,22 @@ db_selected(){
 }
 
 count_rows(){
-  docker exec ac-mysql mysql -uroot -p"$MYSQL_PW" -N -B -e "$1"
+  # Use mysql-utils.sh function if available, fallback to direct command
+  if command -v docker_mysql_query >/dev/null 2>&1; then
+    # Extract database name from query for mysql-utils function
+    local query="$1"
+    local db_name
+    # Simple extraction - assumes "FROM database.table" or "database.table" pattern
+    if [[ "$query" =~ FROM[[:space:]]+([^.[:space:]]+)\. ]]; then
+      db_name="${BASH_REMATCH[1]}"
+      docker_mysql_query "$db_name" "$query" "ac-mysql" "$MYSQL_PW"
+    else
+      # Fallback to original method if can't parse database
+      docker exec ac-mysql mysql -uroot -p"$MYSQL_PW" -N -B -e "$query"
+    fi
+  else
+    docker exec ac-mysql mysql -uroot -p"$MYSQL_PW" -N -B -e "$1"
+  fi
 }
 
 case "${1:-}" in

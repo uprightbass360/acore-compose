@@ -50,9 +50,9 @@ log() {
   printf '%b\n' "${GREEN}$*${NC}"
 }
 
-# Log warning messages (yellow with warning icon)
+# Log warning messages (yellow with warning icon, to stderr for compatibility)
 warn() {
-  printf '%b\n' "${YELLOW}⚠️  $*${NC}"
+  printf '%b\n' "${YELLOW}⚠️  $*${NC}" >&2
 }
 
 # Log error messages (red with error icon, continues execution)

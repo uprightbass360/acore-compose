@@ -7,6 +7,17 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$SCRIPT_DIR"
 
+# Source common libraries for standardized functionality
+if ! source "$SCRIPT_DIR/lib/common.sh" 2>/dev/null; then
+  echo "❌ FATAL: Cannot load $SCRIPT_DIR/lib/common.sh" >&2
+  exit 1
+fi
+
+# Source utility libraries
+source "$SCRIPT_DIR/lib/mysql-utils.sh" 2>/dev/null || warn "MySQL utilities not available"
+source "$SCRIPT_DIR/lib/docker-utils.sh" 2>/dev/null || warn "Docker utilities not available"
+source "$SCRIPT_DIR/lib/env-utils.sh" 2>/dev/null || warn "Environment utilities not available"
+
 # Load environment defaults if present
 if [ -f "$PROJECT_ROOT/.env" ]; then
   set -a
@@ -63,7 +74,7 @@ Examples:
 EOF
 }
 
-err(){ printf 'Error: %s\n' "$*" >&2; }
+# Use standardized error function from lib/common.sh
 die(){ err "$1"; exit 1; }
 
 normalize_token(){
@@ -104,10 +115,14 @@ remove_from_list(){
   arr=("${filtered[@]}")
 }
 
+# Use env-utils.sh function if available, fallback to local implementation
 resolve_relative(){
-  local base="$1" path="$2"
-  if command -v python3 >/dev/null 2>&1; then
-    python3 - "$base" "$path" <<'PY'
+  if command -v path_resolve_absolute >/dev/null 2>&1; then
+    path_resolve_absolute "$2" "$1"
+  else
+    local base="$1" path="$2"
+    if command -v python3 >/dev/null 2>&1; then
+      python3 - "$base" "$path" <<'PY'
 import os, sys
 base, path = sys.argv[1:3]
 if not path:
@@ -117,8 +132,9 @@ elif os.path.isabs(path):
 else:
     print(os.path.normpath(os.path.join(base, path)))
 PY
-  else
-    die "python3 is required but was not found on PATH"
+    else
+      die "python3 is required but was not found on PATH"
+    fi
   fi
 }
 
@@ -248,7 +264,13 @@ generated_at="$(date --iso-8601=seconds)"
 dump_db(){
   local schema="$1" outfile="$2"
   echo "Dumping ${schema} -> ${outfile}"
-  docker exec "$MYSQL_CONTAINER" mysqldump -uroot -p"$MYSQL_PW" "$schema" | gzip > "$outfile"
+
+  # Use mysql-utils.sh function if available, fallback to direct command
+  if command -v mysql_backup_database >/dev/null 2>&1; then
+    mysql_backup_database "$schema" "$outfile" "gzip" "$MYSQL_CONTAINER" "$MYSQL_PW"
+  else
+    docker exec "$MYSQL_CONTAINER" mysqldump -uroot -p"$MYSQL_PW" "$schema" | gzip > "$outfile"
+  fi
 }
 
 for db in "${ACTIVE_DBS[@]}"; do

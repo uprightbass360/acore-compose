@@ -3,8 +3,21 @@
 # to re-copy SQL files.
 set -euo pipefail
 
-info(){ echo "🔧 [restore-stage] $*"; }
-warn(){ echo "⚠️ [restore-stage] $*" >&2; }
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Source common library for standardized logging
+if ! source "$SCRIPT_DIR/lib/common.sh" 2>/dev/null; then
+  echo "❌ FATAL: Cannot load $SCRIPT_DIR/lib/common.sh" >&2
+  exit 1
+fi
+
+# Specialized prefixed logging for this restoration context
+restore_info() { info "🔧 [restore-stage] $*"; }
+restore_warn() { warn "[restore-stage] $*"; }
+
+# Maintain compatibility with existing function calls
+info() { restore_info "$*"; }
+warn() { restore_warn "$*"; }
 
 MODULES_DIR="${MODULES_DIR:-/modules}"
 MODULES_META_DIR="${MODULES_DIR}/.modules-meta"

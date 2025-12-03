@@ -6,6 +6,13 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}" )" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# Source common library for standardized logging
+if ! source "$ROOT_DIR/scripts/bash/lib/common.sh" 2>/dev/null; then
+  echo "❌ FATAL: Cannot load $ROOT_DIR/scripts/bash/lib/common.sh" >&2
+  exit 1
+fi
+
 DEFAULT_COMPOSE_FILE="$ROOT_DIR/docker-compose.yml"
 ENV_FILE="$ROOT_DIR/.env"
 TEMPLATE_FILE="$ROOT_DIR/.env.template"
@@ -15,17 +22,6 @@ source "$ROOT_DIR/scripts/bash/project_name.sh"
 DEFAULT_PROJECT_NAME="$(project_name::resolve "$ENV_FILE" "$TEMPLATE_FILE")"
 source "$ROOT_DIR/scripts/bash/compose_overrides.sh"
 declare -a COMPOSE_FILE_ARGS=()
-
-BLUE='\033[0;34m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-NC='\033[0m'
-
-info(){ echo -e "${BLUE}ℹ️  $*${NC}"; }
-ok(){ echo -e "${GREEN}✅ $*${NC}"; }
-warn(){ echo -e "${YELLOW}⚠️  $*${NC}"; }
-err(){ echo -e "${RED}❌ $*${NC}"; }
 
 read_env(){
   local key="$1" default="${2:-}" value=""

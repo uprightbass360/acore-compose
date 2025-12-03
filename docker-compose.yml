@@ -1,10 +1,109 @@
 name: ${COMPOSE_PROJECT_NAME}
 
+# =============================================================================
+# YAML ANCHORS - Shared Configuration Templates
+# =============================================================================
+
 x-logging: &logging-default
   driver: json-file
   options:
     max-size: "10m"
     max-file: "3"
+
+# Common database connection environment variables
+x-database-config: &database-config
+  CONTAINER_MYSQL: ${CONTAINER_MYSQL}
+  MYSQL_PORT: ${MYSQL_PORT}
+  MYSQL_USER: ${MYSQL_USER}
+  MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+  DB_AUTH_NAME: ${DB_AUTH_NAME}
+  DB_WORLD_NAME: ${DB_WORLD_NAME}
+  DB_CHARACTERS_NAME: ${DB_CHARACTERS_NAME}
+  DB_RECONNECT_SECONDS: ${DB_RECONNECT_SECONDS}
+  DB_RECONNECT_ATTEMPTS: ${DB_RECONNECT_ATTEMPTS}
+
+# AzerothCore database connection strings
+x-azerothcore-databases: &azerothcore-databases
+  AC_LOGIN_DATABASE_INFO: "${CONTAINER_MYSQL};${MYSQL_PORT};${MYSQL_USER};${MYSQL_ROOT_PASSWORD};${DB_AUTH_NAME}"
+  AC_WORLD_DATABASE_INFO: "${CONTAINER_MYSQL};${MYSQL_PORT};${MYSQL_USER};${MYSQL_ROOT_PASSWORD};${DB_WORLD_NAME}"
+  AC_CHARACTER_DATABASE_INFO: "${CONTAINER_MYSQL};${MYSQL_PORT};${MYSQL_USER};${MYSQL_ROOT_PASSWORD};${DB_CHARACTERS_NAME}"
+
+# Common storage volume mounts
+x-storage-volumes: &storage-volumes
+  - ${STORAGE_CONFIG_PATH:-${STORAGE_PATH}/config}:/azerothcore/env/dist/etc
+  - ${STORAGE_LOGS_PATH:-${STORAGE_PATH}/logs}:/azerothcore/logs
+  - ${STORAGE_LOGS_PATH:-${STORAGE_PATH}/logs}:/azerothcore/env/dist/logs
+
+# Authserver common configuration
+x-authserver-common: &authserver-common
+  user: "${CONTAINER_USER}"
+  environment:
+    <<: *azerothcore-databases
+    AC_UPDATES_ENABLE_DATABASES: "0"
+    AC_BIND_IP: "0.0.0.0"
+    AC_LOG_LEVEL: "1"
+    AC_LOGGER_ROOT_CONFIG: "1,Console"
+    AC_LOGGER_SERVER_CONFIG: "1,Console"
+    AC_APPENDER_CONSOLE_CONFIG: "1,2,0"
+  volumes: *storage-volumes
+  ports:
+    - "${AUTH_EXTERNAL_PORT}:${AUTH_PORT}"
+  restart: unless-stopped
+  logging: *logging-default
+  networks:
+    - azerothcore
+  cap_add: ["SYS_NICE"]
+  healthcheck: &auth-healthcheck
+    test: ["CMD", "sh", "-c", "ps aux | grep '[a]uthserver' | grep -v grep || exit 1"]
+    interval: ${AUTH_HEALTHCHECK_INTERVAL}
+    timeout: ${AUTH_HEALTHCHECK_TIMEOUT}
+    retries: ${AUTH_HEALTHCHECK_RETRIES}
+    start_period: ${AUTH_HEALTHCHECK_START_PERIOD}
+
+# Worldserver common configuration
+x-worldserver-common: &worldserver-common
+  user: "${CONTAINER_USER}"
+  stdin_open: true
+  tty: true
+  environment:
+    <<: *azerothcore-databases
+    AC_UPDATES_ENABLE_DATABASES: "7"
+    AC_BIND_IP: "0.0.0.0"
+    AC_DATA_DIR: "/azerothcore/data"
+    AC_SOAP_PORT: "${SOAP_PORT}"
+    AC_PROCESS_PRIORITY: "0"
+    AC_ELUNA_ENABLED: "${AC_ELUNA_ENABLED}"
+    AC_ELUNA_TRACE_BACK: "${AC_ELUNA_TRACE_BACK}"
+    AC_ELUNA_AUTO_RELOAD: "${AC_ELUNA_AUTO_RELOAD}"
+    AC_ELUNA_BYTECODE_CACHE: "${AC_ELUNA_BYTECODE_CACHE}"
+    AC_ELUNA_SCRIPT_PATH: "${AC_ELUNA_SCRIPT_PATH}"
+    AC_ELUNA_REQUIRE_PATHS: "${AC_ELUNA_REQUIRE_PATHS}"
+    AC_ELUNA_REQUIRE_CPATHS: "${AC_ELUNA_REQUIRE_CPATHS}"
+    AC_ELUNA_AUTO_RELOAD_INTERVAL: "${AC_ELUNA_AUTO_RELOAD_INTERVAL}"
+    PLAYERBOT_ENABLED: "${PLAYERBOT_ENABLED}"
+    PLAYERBOT_MAX_BOTS: "${PLAYERBOT_MAX_BOTS}"
+    AC_LOG_LEVEL: "2"
+  ports:
+    - "${WORLD_EXTERNAL_PORT}:${WORLD_PORT}"
+    - "${SOAP_EXTERNAL_PORT}:${SOAP_PORT}"
+  volumes:
+    - ${CLIENT_DATA_PATH:-${STORAGE_CLIENT_DATA_PATH:-${STORAGE_PATH}/client-data}}:/azerothcore/data
+    - ${STORAGE_CONFIG_PATH:-${STORAGE_PATH}/config}:/azerothcore/env/dist/etc
+    - ${STORAGE_LOGS_PATH:-${STORAGE_PATH}/logs}:/azerothcore/logs
+    - ${STORAGE_LOGS_PATH:-${STORAGE_PATH}/logs}:/azerothcore/env/dist/logs
+    - ${STORAGE_MODULES_PATH:-${STORAGE_PATH}/modules}:/azerothcore/modules
+    - ${STORAGE_LUA_SCRIPTS_PATH:-${STORAGE_PATH}/lua_scripts}:/azerothcore/lua_scripts
+  restart: unless-stopped
+  logging: *logging-default
+  networks:
+    - azerothcore
+  cap_add: ["SYS_NICE"]
+  healthcheck: &world-healthcheck
+    test: ["CMD", "sh", "-c", "ps aux | grep '[w]orldserver' | grep -v grep || exit 1"]
+    interval: ${WORLD_HEALTHCHECK_INTERVAL}
+    timeout: ${WORLD_HEALTHCHECK_TIMEOUT}
+    retries: ${WORLD_HEALTHCHECK_RETRIES}
+    start_period: ${WORLD_HEALTHCHECK_START_PERIOD}
 
 services:
   # =====================
@@ -515,10 +614,10 @@ services:
   # Services - Standard (services-standard)
   # =====================
   ac-authserver-standard:
+    <<: *authserver-common
     profiles: ["services-standard"]
     image: ${AC_AUTHSERVER_IMAGE}
     container_name: ac-authserver
-    user: "${CONTAINER_USER}"
     depends_on:
       ac-mysql:
         condition: service_healthy
@@ -526,94 +625,26 @@ services:
         condition: service_completed_successfully
       ac-db-init:
         condition: service_completed_successfully
-    environment:
-      AC_LOGIN_DATABASE_INFO: "${CONTAINER_MYSQL};${MYSQL_PORT};${MYSQL_USER};${MYSQL_ROOT_PASSWORD};${DB_AUTH_NAME}"
-      AC_UPDATES_ENABLE_DATABASES: "0"
-      AC_BIND_IP: "0.0.0.0"
-      AC_LOG_LEVEL: "1"
-      AC_LOGGER_ROOT_CONFIG: "1,Console"
-      AC_LOGGER_SERVER_CONFIG: "1,Console"
-      AC_APPENDER_CONSOLE_CONFIG: "1,2,0"
-    ports:
-      - "${AUTH_EXTERNAL_PORT}:${AUTH_PORT}"
-    restart: unless-stopped
-    logging: *logging-default
-    networks:
-      - azerothcore
-    volumes:
-      - ${STORAGE_CONFIG_PATH:-${STORAGE_PATH}/config}:/azerothcore/env/dist/etc
-      - ${STORAGE_LOGS_PATH:-${STORAGE_PATH}/logs}:/azerothcore/logs
-      - ${STORAGE_LOGS_PATH:-${STORAGE_PATH}/logs}:/azerothcore/env/dist/logs
-    cap_add: ["SYS_NICE"]
-    healthcheck:
-      test: ["CMD", "sh", "-c", "ps aux | grep '[a]uthserver' | grep -v grep || exit 1"]
-      interval: ${AUTH_HEALTHCHECK_INTERVAL}
-      timeout: ${AUTH_HEALTHCHECK_TIMEOUT}
-      retries: ${AUTH_HEALTHCHECK_RETRIES}
-      start_period: ${AUTH_HEALTHCHECK_START_PERIOD}
 
   ac-worldserver-standard:
+    <<: *worldserver-common
     profiles: ["services-standard"]
     image: ${AC_WORLDSERVER_IMAGE}
     container_name: ac-worldserver
-    user: "${CONTAINER_USER}"
-    stdin_open: true
-    tty: true
     depends_on:
       ac-authserver-standard:
         condition: service_healthy
       ac-client-data-standard:
         condition: service_completed_successfully
-    environment:
-      AC_LOGIN_DATABASE_INFO: "${CONTAINER_MYSQL};${MYSQL_PORT};${MYSQL_USER};${MYSQL_ROOT_PASSWORD};${DB_AUTH_NAME}"
-      AC_WORLD_DATABASE_INFO: "${CONTAINER_MYSQL};${MYSQL_PORT};${MYSQL_USER};${MYSQL_ROOT_PASSWORD};${DB_WORLD_NAME}"
-      AC_CHARACTER_DATABASE_INFO: "${CONTAINER_MYSQL};${MYSQL_PORT};${MYSQL_USER};${MYSQL_ROOT_PASSWORD};${DB_CHARACTERS_NAME}"
-      AC_UPDATES_ENABLE_DATABASES: "7"
-      AC_BIND_IP: "0.0.0.0"
-      AC_DATA_DIR: "/azerothcore/data"
-      AC_SOAP_PORT: "${SOAP_PORT}"
-      AC_PROCESS_PRIORITY: "0"
-      AC_ELUNA_ENABLED: "${AC_ELUNA_ENABLED}"
-      AC_ELUNA_TRACE_BACK: "${AC_ELUNA_TRACE_BACK}"
-      AC_ELUNA_AUTO_RELOAD: "${AC_ELUNA_AUTO_RELOAD}"
-      AC_ELUNA_BYTECODE_CACHE: "${AC_ELUNA_BYTECODE_CACHE}"
-      AC_ELUNA_SCRIPT_PATH: "${AC_ELUNA_SCRIPT_PATH}"
-      AC_ELUNA_REQUIRE_PATHS: "${AC_ELUNA_REQUIRE_PATHS}"
-      AC_ELUNA_REQUIRE_CPATHS: "${AC_ELUNA_REQUIRE_CPATHS}"
-      AC_ELUNA_AUTO_RELOAD_INTERVAL: "${AC_ELUNA_AUTO_RELOAD_INTERVAL}"
-      PLAYERBOT_ENABLED: "${PLAYERBOT_ENABLED}"
-      PLAYERBOT_MAX_BOTS: "${PLAYERBOT_MAX_BOTS}"
-      AC_LOG_LEVEL: "2"
-    ports:
-      - "${WORLD_EXTERNAL_PORT}:${WORLD_PORT}"
-      - "${SOAP_EXTERNAL_PORT}:${SOAP_PORT}"
-    volumes:
-      - ${CLIENT_DATA_PATH:-${STORAGE_CLIENT_DATA_PATH:-${STORAGE_PATH}/client-data}}:/azerothcore/data
-      - ${STORAGE_CONFIG_PATH:-${STORAGE_PATH}/config}:/azerothcore/env/dist/etc
-      - ${STORAGE_LOGS_PATH:-${STORAGE_PATH}/logs}:/azerothcore/logs
-      - ${STORAGE_LOGS_PATH:-${STORAGE_PATH}/logs}:/azerothcore/env/dist/logs
-      - ${STORAGE_MODULES_PATH:-${STORAGE_PATH}/modules}:/azerothcore/modules
-      - ${STORAGE_LUA_SCRIPTS_PATH:-${STORAGE_PATH}/lua_scripts}:/azerothcore/lua_scripts
-    restart: unless-stopped
-    logging: *logging-default
-    networks:
-      - azerothcore
-    cap_add: ["SYS_NICE"]
-    healthcheck:
-      test: ["CMD", "sh", "-c", "ps aux | grep '[w]orldserver' | grep -v grep || exit 1"]
-      interval: ${WORLD_HEALTHCHECK_INTERVAL}
-      timeout: ${WORLD_HEALTHCHECK_TIMEOUT}
-      retries: ${WORLD_HEALTHCHECK_RETRIES}
-      start_period: ${WORLD_HEALTHCHECK_START_PERIOD}
 
   # =====================
   # Services - Playerbots (services-playerbots)
   # =====================
   ac-authserver-playerbots:
+    <<: *authserver-common
     profiles: ["services-playerbots"]
     image: ${AC_AUTHSERVER_IMAGE_PLAYERBOTS}
     container_name: ac-authserver
-    user: "${CONTAINER_USER}"
     depends_on:
       ac-mysql:
         condition: service_healthy
@@ -622,7 +653,7 @@ services:
       ac-db-init:
         condition: service_completed_successfully
     environment:
-      AC_LOGIN_DATABASE_INFO: "${CONTAINER_MYSQL};${MYSQL_PORT};${MYSQL_USER};${MYSQL_ROOT_PASSWORD};${DB_AUTH_NAME}"
+      <<: *azerothcore-databases
       AC_UPDATES_ENABLE_DATABASES: "0"
       AC_BIND_IP: "0.0.0.0"
       TZ: "${TZ}"
@@ -630,21 +661,6 @@ services:
       AC_LOGGER_ROOT_CONFIG: "1,Console"
       AC_LOGGER_SERVER_CONFIG: "1,Console"
       AC_APPENDER_CONSOLE_CONFIG: "1,2,0"
-    ports:
-      - "${AUTH_EXTERNAL_PORT}:${AUTH_PORT}"
-    restart: unless-stopped
-    logging: *logging-default
-    networks:
-      - azerothcore
-    volumes:
-      - ${STORAGE_CONFIG_PATH:-${STORAGE_PATH}/config}:/azerothcore/env/dist/etc
-    cap_add: ["SYS_NICE"]
-    healthcheck:
-      test: ["CMD", "sh", "-c", "ps aux | grep '[a]uthserver' | grep -v grep || exit 1"]
-      interval: ${AUTH_HEALTHCHECK_INTERVAL}
-      timeout: ${AUTH_HEALTHCHECK_TIMEOUT}
-      retries: ${AUTH_HEALTHCHECK_RETRIES}
-      start_period: ${AUTH_HEALTHCHECK_START_PERIOD}
 
   ac-authserver-modules:
     profiles: ["services-modules"]
@@ -683,12 +699,10 @@ services:
       start_period: ${AUTH_HEALTHCHECK_START_PERIOD}
 
   ac-worldserver-playerbots:
+    <<: *worldserver-common
     profiles: ["services-playerbots"]
     image: ${AC_WORLDSERVER_IMAGE_PLAYERBOTS}
     container_name: ac-worldserver
-    user: "${CONTAINER_USER}"
-    stdin_open: true
-    tty: true
     depends_on:
       ac-authserver-playerbots:
         condition: service_healthy
@@ -697,9 +711,7 @@ services:
       ac-db-guard:
         condition: service_healthy
     environment:
-      AC_LOGIN_DATABASE_INFO: "${CONTAINER_MYSQL};${MYSQL_PORT};${MYSQL_USER};${MYSQL_ROOT_PASSWORD};${DB_AUTH_NAME}"
-      AC_WORLD_DATABASE_INFO: "${CONTAINER_MYSQL};${MYSQL_PORT};${MYSQL_USER};${MYSQL_ROOT_PASSWORD};${DB_WORLD_NAME}"
-      AC_CHARACTER_DATABASE_INFO: "${CONTAINER_MYSQL};${MYSQL_PORT};${MYSQL_USER};${MYSQL_ROOT_PASSWORD};${DB_CHARACTERS_NAME}"
+      <<: *azerothcore-databases
       AC_UPDATES_ENABLE_DATABASES: "7"
       AC_BIND_IP: "0.0.0.0"
       AC_DATA_DIR: "/azerothcore/data"
@@ -717,27 +729,6 @@ services:
       PLAYERBOT_ENABLED: "${PLAYERBOT_ENABLED}"
       PLAYERBOT_MAX_BOTS: "${PLAYERBOT_MAX_BOTS}"
       AC_LOG_LEVEL: "2"
-    ports:
-      - "${WORLD_EXTERNAL_PORT}:${WORLD_PORT}"
-      - "${SOAP_EXTERNAL_PORT}:${SOAP_PORT}"
-    volumes:
-      - ${CLIENT_DATA_PATH:-${STORAGE_CLIENT_DATA_PATH:-${STORAGE_PATH}/client-data}}:/azerothcore/data
-      - ${STORAGE_CONFIG_PATH:-${STORAGE_PATH}/config}:/azerothcore/env/dist/etc
-      - ${STORAGE_LOGS_PATH:-${STORAGE_PATH}/logs}:/azerothcore/logs
-      - ${STORAGE_LOGS_PATH:-${STORAGE_PATH}/logs}:/azerothcore/env/dist/logs
-      - ${STORAGE_MODULES_PATH:-${STORAGE_PATH}/modules}:/azerothcore/modules
-      - ${STORAGE_LUA_SCRIPTS_PATH:-${STORAGE_PATH}/lua_scripts}:/azerothcore/lua_scripts
-    restart: unless-stopped
-    logging: *logging-default
-    networks:
-      - azerothcore
-    cap_add: ["SYS_NICE"]
-    healthcheck:
-      test: ["CMD", "sh", "-c", "ps aux | grep '[w]orldserver' | grep -v grep || exit 1"]
-      interval: ${WORLD_HEALTHCHECK_INTERVAL}
-      timeout: ${WORLD_HEALTHCHECK_TIMEOUT}
-      retries: ${WORLD_HEALTHCHECK_RETRIES}
-      start_period: ${WORLD_HEALTHCHECK_START_PERIOD}
 
   ac-worldserver-modules:
     profiles: ["services-modules"]

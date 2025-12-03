@@ -7,11 +7,11 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR"
 
-BLUE='\033[0;34m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
-info(){ printf '%b\n' "${BLUE}ℹ️  $*${NC}"; }
-ok(){ printf '%b\n' "${GREEN}✅ $*${NC}"; }
-warn(){ printf '%b\n' "${YELLOW}⚠️  $*${NC}"; }
-err(){ printf '%b\n' "${RED}❌ $*${NC}"; }
+# Source common library for standardized logging
+if ! source "$ROOT_DIR/scripts/bash/lib/common.sh" 2>/dev/null; then
+  echo "❌ FATAL: Cannot load $ROOT_DIR/scripts/bash/lib/common.sh" >&2
+  exit 1
+fi
 
 FORCE_DIRTY=0
 DEPLOY_ARGS=()
